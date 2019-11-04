@@ -20,10 +20,6 @@ w = random.rand(3)                          #以隨機值當作初始權重(w1,w
 errors = []
 lr = 0.29                                   #lr = learning rate
 iteration = 100                             #iteration設為100        
-
-for x, _ in training_data:
-    result = dot(w, x)
-    print("{}: {} -> {}".format(x[:2], result, activation(result)))
  
 
 for i in range(iteration):
@@ -35,7 +31,9 @@ for i in range(iteration):
     print("iteration %s = %s" % (i+1, w))   #列出每個 iteration所求得的 W值
 print(w)                                    #目前的最佳解 W (w1,w2,w0)
                                
-
+for x, _ in training_data:
+    result = dot(w, x)
+    print("{}: {} -> {}".format(x[:2], result, activation(result)))
 
 from pylab import plot, ylim                #以圖表方式呈現在各個 iteration中,error的值
 ylim([-1,1])
