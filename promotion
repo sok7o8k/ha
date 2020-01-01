@@ -1,0 +1,31 @@
+promotion <- read.csv("C:\\Users\\sok7o\\Desktop\\promotion.csv", header = T, sep = ",")
+head(promotion)
+
+train = promotion[1:49328, ]      #90% training
+test = promotion[49329:54809, ]   #10% testing
+
+train$department <- factor(train$department)    #類別變數轉成因子 (test)
+train$region <- factor(train$region)
+train$education <- factor(train$education)
+train$gender <- factor(train$gender)
+train$recruitment_channel <- factor(train$recruitment_channel)
+
+test$department <- factor(test$department) #類別變數轉成因子 (test)
+test$region <- factor(test$region)
+test$education <- factor(test$education)
+test$gender <- factor(test$gender)
+test$recruitment_channel <- factor(test$recruitment_channel)
+
+sapply(train,function(x) sum(is.na(x))) #列出變數NA值
+
+#篩選有用變數(把employee_id去掉)
+train2 <- subset(train, select = c(department, region, education, gender, recruitment_channel, no_of_trainings, age, previous_year_rating, length_of_service, KPIs_met, awards_won, avg_training_score, is_promoted))
+test2 <- subset(test, select = c(department, region, education, gender, recruitment_channel, no_of_trainings, age, previous_year_rating, length_of_service, KPIs_met, awards_won, avg_training_score))
+
+#train logistics model
+model <- glm(is_promoted ~., family = binomial(link="logit"),data = train2)
+summary(model)
+
+#預測
+result <- predict(model, newdata = test2, type = 'response')
+print(result)
