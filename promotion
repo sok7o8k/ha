@@ -18,7 +18,7 @@ test$recruitment_channel <- factor(test$recruitment_channel)
 
 sapply(train,function(x) sum(is.na(x))) #列出變數NA值
 
-#篩選有用變數(把employee_id去掉)
+#篩選有用變數(把employee_id去掉)  把CSV檔的KPI和award兩項改成KPIs_met和awards_won (數字跟問號會讀不到)
 train2 <- subset(train, select = c(department, region, education, gender, recruitment_channel, no_of_trainings, age, previous_year_rating, length_of_service, KPIs_met, awards_won, avg_training_score, is_promoted))
 test2 <- subset(test, select = c(department, region, education, gender, recruitment_channel, no_of_trainings, age, previous_year_rating, length_of_service, KPIs_met, awards_won, avg_training_score))
 
