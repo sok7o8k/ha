@@ -1,0 +1,19 @@
+def reverse_number(num):
+    # 將數字轉換為字串，然後反轉它
+    num_str = str(num)
+    reversed_str = num_str[::-1]
+    
+    # 找到第一個非零數字的索引
+    non_zero_index = next((i for i, c in enumerate(reversed_str) if c != '0'), None)
+    
+    # 若存在非零數字，則返回其後的所有字串，否則返回空字串
+    if non_zero_index is not None:
+        return int(reversed_str[non_zero_index:])
+    else:
+        return 0
+    
+# 從使用者那裡獲取輸入
+num = int(input())
+# 呼叫函式來反轉數字並印出結果
+reversed_num = reverse_number(num)
+print(reversed_num)
