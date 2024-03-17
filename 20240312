@@ -17,3 +17,49 @@ num = int(input())
 # 呼叫函式來反轉數字並印出結果
 reversed_num = reverse_number(num)
 print(reversed_num)
+
+----
+
+def find_duplicate(numbers):
+    # 建立一個空集合來存儲出現過的數字
+    seen = set()
+    # 遍歷輸入的數字串列
+    for num in numbers:
+        # 如果數字已經在集合中，表示找到了重複的數字
+        if num in seen:
+            return num
+        # 否則將數字加入集合中
+        else:
+            seen.add(num)
+    # 如果沒有找到重複的數字，返回None
+    return None
+
+# 從使用者那裡獲取輸入的數字串列，並將其轉換為整數串列
+numbers = list(map(int, input().split()))
+
+# 呼叫函式找出唯一的重複數字
+duplicate = find_duplicate(numbers)
+
+# 如果找到了重複的數字，印出結果，否則印出找不到的訊息
+if duplicate is not None:
+    print(duplicate)
+else:
+    print("N/A")
+
+----
+
+def fibonacci(x):
+    if len(x) < 2:
+        return False
+
+    for i in range(2,len(x)):
+        if x[i] != x[i-1] + x[i-2]:
+            return False
+    return True
+
+test = list(map(int, input().split()))
+
+if fibonacci(test):
+    print("yes")
+else:
+    print("no")    
