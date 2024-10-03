@@ -1,248 +1,104 @@
-from sys import path
-import plotly.graph_objects as go
-import plotly.express as px
-from dash import Dash, html, dcc, Input, Output, State, dash_table
-import dash_bootstrap_components as dbc
-from dash.exceptions import PreventUpdate
-import pandas as pd
-import base64
-import io
-from dash_auth import BasicAuth
-import PIconnect as PI
-
-PI.PIConfig.DEFAULT_TIMEZONE = "Asia/Taipei"
-
-path.append(
-    "C:\\Users\\chenk23\\Desktop\\DT2\\20240507\\03_Databases"
-)  # added to the path BEFORE importing the pyadomd package
-
-from pyadomd import Pyadomd
-import pandas as pd
-
-conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
-query = "   SELECT NON EMPTY { [Measures].[M_Defect Loss%] } ON COLUMNS, NON EMPTY { ([Time].[Time YQMD].[Date].ALLMEMBERS * [Tank].[Tank ID].[Tank ID].ALLMEMBERS * [Defect Tracking].[Defect Tracking Hierarchy].[Defect ID].ALLMEMBERS ) } DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME ON ROWS FROM ( SELECT ( { [Time].[Year].&[2024] } ) ON COLUMNS FROM ( SELECT ( { [Defect Tracking].[Defect Tracking Hierarchy].[Defect Group].&[M_Melt Loss] } ) ON COLUMNS FROM ( SELECT ( { [Production Type].[Production Type Hierarchy].[Production Type].&[1], [Production Type].[Production Type Hierarchy].[Production Type].&[2] } ) ON COLUMNS FROM ( SELECT ( { [Plant].[Plant Hierarchy].[Plant_ID].&[TC] } ) ON COLUMNS FROM ( SELECT ( { [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], [Tank].[Tank ID].&[TC03], [Tank].[Tank ID].&[TC04], [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], [Tank].[Tank ID].&[TC07], [Tank].[Tank ID].&[TC08], [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], [Tank].[Tank ID].&[TC11], [Tank].[Tank ID].&[TC12], [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], [Tank].[Tank ID].&[TC15], [Tank].[Tank ID].&[TC16], [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], [Tank].[Tank ID].&[TC19], [Tank].[Tank ID].&[TC20], [Tank].[Tank ID].&[TC21] } ) ON COLUMNS FROM [PPD_Actual]))))) WHERE ( [Plant].[Plant Hierarchy].[Plant_ID].&[TC], [Production Type].[Production Type Hierarchy].CurrentMember, [Time].[Year].&[2024] ) CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS"
-
-with Pyadomd(conn_str) as conn:
-    with conn.cursor().execute(query) as cur:
-        df = pd.DataFrame(cur.fetchone(), columns=[i.name for i in cur.description])
-
-# Clean this table!
-df_cleaned = df.loc[
-    :, [c for c in df.columns if c[-20:] != "[MEMBER_UNIQUE_NAME]"]
-]  # 去掉"[MEMBER_UNIQUE_NAME]"的columns
-df_cleaned.columns = [
-    c[:-17] if c[-16:] == "[MEMBER_CAPTION]" else c for c in df_cleaned.columns
-]  # 去掉欄位中的"[MEMBER_CAPTION]"
-df_cleaned.columns = [c.split(".")[-1][1:-1] for c in df_cleaned.columns]
-
 import dash
-import dash_core_components as dcc
-import dash_html_components as html
-from dash.dependencies import Input, Output, State
+from dash import dcc, html
+from dash.dependencies import Input, Output
+import plotly.graph_objects as go
 
-# 创建 Dash 应用
-app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP])
+# 创建 Dash app
+app = dash.Dash(__name__)
 
-tanks = df_cleaned["Tank ID"].unique()
-defects = df_cleaned["Defect ID"].unique()
+# 初始图表对象
+fig = go.Figure()
 
-app.layout = dbc.Container([
-    dbc.Row([
-        dbc.Col([
-            dbc.Card([
-                dbc.CardHeader("選擇日期"),
-                dbc.CardBody([
-                    dcc.DatePickerRange(
-                        id='date-picker',
-                        min_date_allowed=df_cleaned['Date'].min(),
-                        max_date_allowed=df_cleaned['Date'].max(),
-                        start_date=df_cleaned['Date'].min(),
-                        end_date=df_cleaned['Date'].max()
-                    ),
-                ])
-            ], className="mb-3"),
-            dbc.Card([
-                dbc.CardHeader("選擇Tank"),
-                dbc.CardBody([
-                    dcc.Dropdown(
-                        id='tank-picker',
-                        options=[{'label': i, 'value': i} for i in tanks],
-                        value=tanks[0]
-                    ),
-                ]),
-            ], className="mb-3"),
-            dbc.Card([
-                dbc.CardHeader("選擇Defect"),
-                dbc.CardBody([
-                    dcc.Dropdown(
-                        id='defect-picker',
-                        options=[{'label': i, 'value': i} for i in defects],
-                        value=defects[0]
-                    ),
-                ]),
-            ], className="mb-3"),
-        ], width=4),
-    ]),
-    dbc.Row([
-    dbc.Col([
-        dbc.Card([
-            dbc.CardHeader("選擇Pi Data取值頻率"),
-            dbc.CardBody([
-                dbc.RadioItems(
-                    options=[
-                        {"label": "Day", "value": "d"},
-                        {"label": "Hour", "value": "h"},
-                        {"label": "Minute", "value": "m"},
-                        {"label": "Second", "value": "s"},
-                    ],
-                    value="d",
-                    inline=True,
-                    id="interval",
-                    className="mb-3",
-                ),
-            ]),
-        ], className="mb-3"),
-    ], width=6),
-    ]),
-    dbc.Row([
-    dbc.Col([
-        dbc.Card([
-            dbc.CardHeader("選擇PI Tags"),
-            dbc.CardBody([
-                html.Div([
-                    dcc.Dropdown(
-                        options=[],
-                        multi=True,
-                        id="tags",
-                        className="mb-3",
-                    ),
-                ]),
-            ]),
-        ], className="mb-3"),
-    ], width=6)
-    ]),
-        dbc.Row([
-        dbc.Col([
-            dbc.Card([
-                dbc.CardBody([
-                    dcc.Graph(
-                        id="combined-graph",
-                        style={"height": "500px"},
-                    ),
-                ]),
-            ], className="mb-3"),
-        ], width=11),
-    ]),
+# 添加条形图 (y 轴在左边)
+fig.add_trace(go.Bar(
+    x=[1, 2, 3, 4],
+    y=[10, 20, 30, 40],
+    name="Bar Chart",
+    yaxis='y'
+))
+
+# 初始布局
+fig.update_layout(
+    yaxis=dict(title="Bar Chart Y Axis", titlefont=dict(color="blue"), tickfont=dict(color="blue")),
+    xaxis=dict(title="X Axis"),
+    dragmode='zoom'
+)
+
+# 定义 app 布局
+app.layout = html.Div([
+    dcc.Dropdown(
+        id='axis-selector',
+        options=[
+            {'label': 'Line Chart 1', 'value': 'line1'},
+            {'label': 'Line Chart 2', 'value': 'line2'},
+            {'label': 'Line Chart 3', 'value': 'line3'},
+            {'label': 'Line Chart 4', 'value': 'line4'},
+            {'label': 'Line Chart 5', 'value': 'line5'},
+        ],
+        multi=True,
+        placeholder="Select line charts to add"
+    ),
+    dcc.Graph(id='example-graph', figure=fig)
 ])
 
+# 更新图表回调函数
 @app.callback(
-    Output("tags", "options"), 
-    Input("tank-picker", "value")
+    Output('example-graph', 'figure'),
+    [Input('axis-selector', 'value')]
 )
-def update_tags_options(Tank_ID):
-    tags_df = pd.read_csv("tags.csv")
-    csv_tags = tags_df.loc[tags_df["tank"].str.startswith(Tank_ID), "tag"].tolist()
+def update_graph(selected_values):
+    # 创建新的图形对象
+    fig = go.Figure()
 
-    with PI.PIServer(server="grape") as server:
-        points = server.search(f'*{Tank_ID}*')
-        pi_tags = [p.name for p in points]
+    # 添加条形图 (y 轴在左边)
+    fig.add_trace(go.Bar(
+        x=[1, 2, 3, 4],
+        y=[10, 20, 30, 40],
+        name="Bar Chart",
+        yaxis='y'
+    ))
 
-    combined_tags = csv_tags + pi_tags
-    return combined_tags
+    # 添加用户选择的折线图
+    if selected_values:
+        # 不同折线图的数据
+        lines = {
+            'line1': ([100, 200, 300, 400], "Line Chart 1", 'y2', "green", 0.85),
+            'line2': ([150, 250, 350, 450], "Line Chart 2", 'y3', "red", 0.9),
+            'line3': ([120, 220, 320, 420], "Line Chart 3", 'y4', "purple", 0.95),
+            'line4': ([110, 210, 310, 410], "Line Chart 4", 'y5', "orange", 1.0),
+            'line5': ([130, 230, 330, 430], "Line Chart 5", 'y6', "brown", 1.05),
+        }
 
+        for value in selected_values:
+            data, name, axis, color, pos = lines[value]
+            fig.add_trace(go.Scatter(
+                x=[1, 2, 3, 4],
+                y=data,
+                name=name,
+                yaxis=axis
+            ))
 
-from plotly.subplots import make_subplots
-
-# ...
-
-@app.callback(
-    Output("combined-graph", "figure"),
-    Input("tags", "value"),
-    Input("date-picker", "start_date"),
-    Input("date-picker", "end_date"),
-    Input("interval", "value"),
-    Input("tank-picker", "value"),
-)
-def update_combined_graph(tags, start_date, end_date, interval, tank):
-    # 创建一个空的图表
-    fig = go.Figure(layout=dict(colorway=px.colors.qualitative.Plotly))
-
-    # 在图表中添加堆叠柱状图
-    start_date = pd.to_datetime(start_date)
-    end_date = pd.to_datetime(end_date)
-    filtered_df = df_cleaned[
-        (pd.to_datetime(df_cleaned["Date"]) >= start_date) &
-        (pd.to_datetime(df_cleaned["Date"]) <= end_date) &
-        (df_cleaned["Tank ID"] == tank)
-    ]
-
-    for defect in filtered_df['Defect ID'].unique():
-        df_defect = filtered_df[filtered_df['Defect ID'] == defect]
-        fig.add_trace(go.Bar(x=df_defect["Date"], 
-                             y=df_defect["M_Defect Loss%"], 
-                             name=defect))
-
-    # 设置柱状图为堆叠模式
-    fig.update_layout(barmode='stack')
-
-    # 添加趋势线
-    if tags and start_date and end_date and interval:
-        servername = "grape"
-        with PI.PIServer(server=servername) as server:
-            points = server.search(tags)
-            if len(points) > 0:
-                series = []
-                for p in points:
-                    data = p.interpolated_values(start_date, end_date, "1" + interval)
-                    series.append(data)
-                df = pd.concat(series, axis=1)
-                df["Timestamp"] = data.index
-                df['Timestamp'] = df['Timestamp'].dt.strftime('%Y-%m-%d %H:%M:%S')
-                df['Timestamp'] = pd.to_datetime(df['Timestamp'])
-
-                # 初始化一个辅助变量，用于生成多个 y 轴
-                axis_count = 2
-
-                # 遍历所有选定的标签
-                for tag in tags:
-                    # 检查每个标签是否存在于数据框中
-                    if tag in df.columns:
-                        # 为该标签添加一个轨迹，并为其创建一个单独的 y 轴
-                        fig.add_trace(go.Scatter(x=df["Timestamp"], 
-                                                 y=df[tag], 
-                                                 mode='lines', 
-                                                 name=tag,
-                                                 line=dict(color=fig['layout']['colorway'][axis_count - 2]),  # 设置线的颜色
-                                                 yaxis='y' + str(axis_count)))
-
-                        # 创建一个新的 y 轴
-                        fig.update_layout(
-                            **{'yaxis' + str(axis_count): dict(
-                                titlefont=dict(color=fig['layout']['colorway'][axis_count - 2]),
-                                tickfont=dict(color=fig['layout']['colorway'][axis_count - 2]),
-                                anchor="free",
-                                overlaying= 'y',
-                                side="right",
-                                position=1-(0.05*(axis_count-1))
-                            )}
-                        )
-                        
-                        # 增加辅助变量的值，用于下一个标签
-                        axis_count += 1
-    # 调整布局
-                fig.update_layout(
-                    title= f'{tank} Performance and Process trend',
-                    xaxis_title='Date',
-                    yaxis_title='Value',
-                    height=500,
-                    margin=dict(b=0, l=0, r=35, t=90),
-                    dragmode = 'zoom',
-                    legend_title_text=None,
-                    legend=dict(
-                        orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
-                    ),
+            # 动态添加 y 轴
+            fig.update_layout({
+                axis: dict(
+                    title=name + " Y Axis",
+                    titlefont=dict(color=color),
+                    tickfont=dict(color=color),
+                    overlaying='y',
+                    side='right',
+                    position=pos
                 )
+            })
+
+    # 更新布局
+    fig.update_layout(
+        yaxis=dict(title="Bar Chart Y Axis", titlefont=dict(color="blue"), tickfont=dict(color="blue")),
+        xaxis=dict(title="X Axis"),
+        dragmode='zoom'
+    )
+
     return fig
 
+# 运行 app
 if __name__ == '__main__':
-    app.run_server(debug=True, port='7788')
+    app.run_server(debug=True)
