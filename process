@@ -246,3 +246,99 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
 
 if __name__ == '__main__':
     app.run_server(debug=True, port='7788')
+
+@app.callback(
+    Output("combined-graph", "figure"),
+    Input("tags", "value"),
+    Input("date-picker", "start_date"),
+    Input("date-picker", "end_date"),
+    Input("interval", "value"),
+    Input("tank-picker", "value"),
+)
+def update_combined_graph(tags, start_date, end_date, interval, tank):
+    # 創建空的圖表
+    fig = go.Figure(layout=dict(colorway=px.colors.qualitative.Plotly))
+
+    # 堆疊柱狀圖部分
+    start_date = pd.to_datetime(start_date)
+    end_date = pd.to_datetime(end_date)
+    filtered_df = df_cleaned[
+        (pd.to_datetime(df_cleaned["Date"]) >= start_date) &
+        (pd.to_datetime(df_cleaned["Date"]) <= end_date) &
+        (df_cleaned["Tank ID"] == tank)
+    ]
+
+    for defect in filtered_df['Defect ID'].unique():
+        df_defect = filtered_df[filtered_df['Defect ID'] == defect]
+        fig.add_trace(go.Bar(x=df_defect["Date"], 
+                             y=df_defect["M_Defect Loss%"], 
+                             name=defect))
+
+    fig.update_layout(barmode='stack')
+
+    # 添加PI Tags的趨勢線
+    if tags and start_date and end_date and interval:
+        servername = "grape"
+        with PI.PIServer(server=servername) as server:
+            points = server.search(tags)
+            if len(points) > 0:
+                series = []
+                for p in points:
+                    summary_type = 'Average'  # 設定為平均值
+                    summary_duration = "1" + interval  # 根據 interval 設置時間區間
+
+                    # 使用 summary 方法來獲取每個區間的平均值
+                    data = p.summary(
+                        start_time=start_date,
+                        end_time=end_date,
+                        summary_duration=summary_duration,
+                        summary_type=summary_type
+                    )
+                    # 提取時間和平均值
+                    avg_data = pd.DataFrame(data).reset_index()
+                    avg_data.columns = ['Timestamp', p.name]
+
+                    series.append(avg_data.set_index('Timestamp'))
+                df = pd.concat(series, axis=1)
+
+                # 處理時間格式
+                df['Timestamp'] = df.index
+                df['Timestamp'] = pd.to_datetime(df['Timestamp'])
+
+                axis_count = 2
+                for tag in tags:
+                    if tag in df.columns:
+                        fig.add_trace(go.Scatter(x=df["Timestamp"], 
+                                                 y=df[tag], 
+                                                 mode='lines', 
+                                                 name=tag,
+                                                 line=dict(color=fig['layout']['colorway'][axis_count + 1]),  
+                                                 yaxis='y' + str(axis_count)))
+
+                        fig.update_layout(
+                            **{'yaxis' + str(axis_count): dict(
+                                titlefont=dict(color=fig['layout']['colorway'][axis_count + 1]),
+                                tickfont=dict(color=fig['layout']['colorway'][axis_count + 1]),
+                                anchor="free",
+                                overlaying= 'y',
+                                side="right",
+                                position=1-(0.04*(axis_count-1))
+                            )}
+                        )
+                        
+                        axis_count += 1
+
+    fig.update_layout(
+        title=f'{tank} Performance and Process trend',
+        xaxis=dict(domain=[0, 1-((axis_count-2)*0.04)], title='Date'),
+        yaxis_title='Value',
+        height=500,
+        margin=dict(b=0, l=0, r=90, t=90+30*(axis_count/3)),
+        dragmode='zoom',
+        legend_title_text=None,
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
+        ),
+    )
+
+    return fig
