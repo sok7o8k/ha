@@ -1,3 +1,160 @@
+from sys import path
+import plotly.graph_objects as go
+import plotly.express as px
+from dash import Dash, html, dcc, Input, Output, State, dash_table
+import dash_bootstrap_components as dbc
+from dash.exceptions import PreventUpdate
+import pandas as pd
+import base64
+import io
+from dash_auth import BasicAuth
+import PIconnect as PI
+
+PI.PIConfig.DEFAULT_TIMEZONE = "Asia/Taipei"
+
+path.append(
+    "C:\\Users\\chenk23\\Desktop\\DT2\\20240507\\03_Databases"
+)  # added to the path BEFORE importing the pyadomd package
+
+from pyadomd import Pyadomd
+import pandas as pd
+
+conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
+query = "   SELECT NON EMPTY { [Measures].[M_Defect Loss%] } ON COLUMNS, NON EMPTY { ([Time].[Time YQMD].[Date].ALLMEMBERS * [Tank].[Tank ID].[Tank ID].ALLMEMBERS * [Defect Tracking].[Defect Tracking Hierarchy].[Defect ID].ALLMEMBERS ) } DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME ON ROWS FROM ( SELECT ( { [Time].[Year].&[2024] } ) ON COLUMNS FROM ( SELECT ( { [Defect Tracking].[Defect Tracking Hierarchy].[Defect Group].&[M_Melt Loss] } ) ON COLUMNS FROM ( SELECT ( { [Production Type].[Production Type Hierarchy].[Production Type].&[1], [Production Type].[Production Type Hierarchy].[Production Type].&[2] } ) ON COLUMNS FROM ( SELECT ( { [Plant].[Plant Hierarchy].[Plant_ID].&[TC] } ) ON COLUMNS FROM ( SELECT ( { [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], [Tank].[Tank ID].&[TC03], [Tank].[Tank ID].&[TC04], [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], [Tank].[Tank ID].&[TC07], [Tank].[Tank ID].&[TC08], [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], [Tank].[Tank ID].&[TC11], [Tank].[Tank ID].&[TC12], [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], [Tank].[Tank ID].&[TC15], [Tank].[Tank ID].&[TC16], [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], [Tank].[Tank ID].&[TC19], [Tank].[Tank ID].&[TC20], [Tank].[Tank ID].&[TC21] } ) ON COLUMNS FROM [PPD_Actual]))))) WHERE ( [Plant].[Plant Hierarchy].[Plant_ID].&[TC], [Production Type].[Production Type Hierarchy].CurrentMember, [Time].[Year].&[2024] ) CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS"
+
+with Pyadomd(conn_str) as conn:
+    with conn.cursor().execute(query) as cur:
+        df = pd.DataFrame(cur.fetchone(), columns=[i.name for i in cur.description])
+
+# Clean this table!
+df_cleaned = df.loc[
+    :, [c for c in df.columns if c[-20:] != "[MEMBER_UNIQUE_NAME]"]
+]  # 去掉"[MEMBER_UNIQUE_NAME]"的columns
+df_cleaned.columns = [
+    c[:-17] if c[-16:] == "[MEMBER_CAPTION]" else c for c in df_cleaned.columns
+]  # 去掉欄位中的"[MEMBER_CAPTION]"
+df_cleaned.columns = [c.split(".")[-1][1:-1] for c in df_cleaned.columns]
+
+import dash
+import dash_core_components as dcc
+import dash_html_components as html
+from dash.dependencies import Input, Output, State
+
+# 创建 Dash 应用
+app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP])
+
+tanks = df_cleaned["Tank ID"].unique()
+defects = df_cleaned["Defect ID"].unique()
+
+app.layout = dbc.Container([
+    dbc.Row([
+        dbc.Col([
+            dbc.Card([
+                dbc.CardHeader("選擇日期"),
+                dbc.CardBody([
+                    dcc.DatePickerRange(
+                        id='date-picker',
+                        min_date_allowed=df_cleaned['Date'].min(),
+                        max_date_allowed=df_cleaned['Date'].max(),
+                        start_date=df_cleaned['Date'].min(),
+                        end_date=df_cleaned['Date'].max()
+                    ),
+                ])
+            ], className="mb-3"),
+            dbc.Card([
+                dbc.CardHeader("選擇Tank"),
+                dbc.CardBody([
+                    dcc.Dropdown(
+                        id='tank-picker',
+                        options=[{'label': i, 'value': i} for i in tanks],
+                        value=tanks[0]
+                    ),
+                ]),
+            ], className="mb-3"),
+            dbc.Card([
+                dbc.CardHeader("選擇Defect"),
+                dbc.CardBody([
+                    dcc.Dropdown(
+                        id='defect-picker',
+                        options=[{'label': i, 'value': i} for i in defects],
+                        value=defects[0]
+                    ),
+                ]),
+            ], className="mb-3"),
+        ], width=4),
+    ]),
+    dbc.Row([
+    dbc.Col([
+        dbc.Card([
+            dbc.CardHeader("選擇Pi Data取值頻率"),
+            dbc.CardBody([
+                dbc.RadioItems(
+                    options=[
+                        {"label": "Day", "value": "d"},
+                        {"label": "Hour", "value": "h"},
+                        {"label": "Minute", "value": "m"},
+                        {"label": "Second", "value": "s"},
+                    ],
+                    value="d",
+                    inline=True,
+                    id="interval",
+                    className="mb-3",
+                ),
+            ]),
+        ], className="mb-3"),
+    ], width=6),
+    ]),
+    dbc.Row([
+    dbc.Col([
+        dbc.Card([
+            dbc.CardHeader("選擇PI Tags"),
+            dbc.CardBody([
+                html.Div([
+                    dcc.Dropdown(
+                        options=[],
+                        multi=True,
+                        id="tags",
+                        className="mb-3",
+                    ),
+                ]),
+            ]),
+        ], className="mb-3"),
+    ], width=6)
+    ]),
+        dbc.Row([
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    dcc.Graph(
+                        id="combined-graph",
+                        style={"height": "500px"},
+                    ),
+                ]),
+            ], className="mb-3"),
+        ], width=11),
+    ]),
+])
+
+@app.callback(
+    Output("tags", "options"), 
+    Input("tank-picker", "value")
+)
+def update_tags_options(Tank_ID):
+    tags_df = pd.read_csv("tags.csv")
+    csv_tags = tags_df.loc[tags_df["tank"].str.startswith(Tank_ID), "tag"].tolist()
+
+    with PI.PIServer(server="grape") as server:
+        points = server.search(f'*{Tank_ID}*')
+        pi_tags = [p.name for p in points]
+
+    combined_tags = csv_tags + pi_tags
+    return combined_tags
+
+
+from plotly.subplots import make_subplots
+
+# ...
+
 @app.callback(
     Output("combined-graph", "figure"),
     Input("tags", "value"),
@@ -38,7 +195,7 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
                 for p in points:
                     interval_value = "1" + interval  # 根據 interval 設置時間區間
                     # 使用 interpolated 方法來獲取每個時間點的數據
-                    data = p.interpolated(
+                    data = p.interpolated_values(
                         start_time=start_date,
                         end_time=end_date,
                         interval=interval_value
@@ -101,3 +258,6 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
     )
 
     return fig
+
+if __name__ == '__main__':
+    app.run_server(debug=True, port='7788')
