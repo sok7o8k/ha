@@ -1,7 +1,70 @@
-                        # 使用 pandas 的 resample 來根據選擇的 interval 重新取樣數據
-                        resampled_data = recorded_data.resample(interval_mapping[interval]).mean()
-                    else:
-                        resampled_data = recorded_data  # 如果沒有指定 interval，使用原始數據
- 
-                    series.append(resampled_data)
-TypeError: unsupported operand type(s) for +: 'float' and 'AFEnumerationValue'
+if tags and start_date and end_date and interval:
+    servername = "grape"
+    with PI.PIServer(server=servername) as server:
+        points = server.search(tags)
+        if len(points) > 0:
+            series = []
+            for p in points:
+                # 使用 recorded 方法來獲取原始數據
+                data = p.recorded_values(
+                    start_time=start_date,
+                    end_time=end_date
+                )
+
+                # 提取時間和數據
+                recorded_data = pd.DataFrame(data).reset_index()
+                recorded_data.columns = ['Timestamp', p.name]
+
+                # 處理 AFEnumerationValue，將其轉換為對應的數字值
+                if isinstance(recorded_data[p.name].iloc[0], PI.AFEnumerationValue):
+                    recorded_data[p.name] = recorded_data[p.name].apply(lambda x: x.Value)
+
+                # 設定時間戳
+                recorded_data['Timestamp'] = pd.to_datetime(recorded_data['Timestamp'])
+                recorded_data.set_index('Timestamp', inplace=True)
+
+                # 根據 interval 重新取樣數據
+                interval_mapping = {
+                    "d": "1D",  # 天
+                    "h": "1H",  # 小時
+                    "m": "1T",  # 分鐘
+                    "s": "1S",  # 秒
+                }
+
+                if interval in interval_mapping:
+                    # 使用 pandas 的 resample 來根據選擇的 interval 重新取樣數據
+                    resampled_data = recorded_data.resample(interval_mapping[interval]).mean()
+                else:
+                    resampled_data = recorded_data  # 如果沒有指定 interval，使用原始數據
+
+                series.append(resampled_data)
+
+            # 合併所有 PI tags 數據
+            df = pd.concat(series, axis=1)
+
+            # 處理時間格式
+            df['Timestamp'] = df.index
+            df['Timestamp'] = pd.to_datetime(df['Timestamp'])
+
+            axis_count = 2
+            for tag in tags:
+                if tag in df.columns:
+                    fig.add_trace(go.Scatter(x=df["Timestamp"], 
+                                             y=df[tag], 
+                                             mode='lines', 
+                                             name=tag,
+                                             line=dict(color=fig['layout']['colorway'][axis_count + 1]),  
+                                             yaxis='y' + str(axis_count)))
+
+                    fig.update_layout(
+                        **{'yaxis' + str(axis_count): dict(
+                            titlefont=dict(color=fig['layout']['colorway'][axis_count + 1]),
+                            tickfont=dict(color=fig['layout']['colorway'][axis_count + 1]),
+                            anchor="free",
+                            overlaying= 'y',
+                            side="right",
+                            position=1-(0.04*(axis_count-1))
+                        )}
+                    )
+
+                    axis_count += 1
