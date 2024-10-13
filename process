@@ -92,8 +92,7 @@ app.layout = dbc.Container([
                     options=[
                         {"label": "Day", "value": "d"},
                         {"label": "Hour", "value": "h"},
-                        {"label": "Minute", "value": "m"},
-                        {"label": "Second", "value": "s"},
+                        {"label": "Minute", "value": "m"}
                     ],
                     value="d",
                     inline=True,
@@ -185,7 +184,7 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
 
     fig.update_layout(barmode='stack')
 
-    # 添加PI Tags的趨勢線
+        # 添加PI Tags的趨勢線
     if tags and start_date and end_date and interval:
         servername = "grape"
         with PI.PIServer(server=servername) as server:
@@ -193,25 +192,43 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
             if len(points) > 0:
                 series = []
                 for p in points:
-                    interval_value = "1" + interval  # 根據 interval 設置時間區間
-                    # 使用 interpolated 方法來獲取每個時間點的數據
-                    data = p.interpolated_values(
+                    # 使用 recorded 方法來獲取原始數據
+                    data = p.recorded_values(
                         start_time=start_date,
-                        end_time=end_date,
-                        interval=interval_value
+                        end_time=end_date
                     )
 
                     # 提取時間和數據
-                    interpolated_data = pd.DataFrame(data).reset_index()
-                    interpolated_data.columns = ['Timestamp', p.name]
+                    recorded_data = pd.DataFrame(data).reset_index()
+                    recorded_data.columns = ['Timestamp', p.name]
 
-                    # 手動計算每個區間的平均值
-                    interpolated_data['Timestamp'] = pd.to_datetime(interpolated_data['Timestamp'])
-                    interpolated_data.set_index('Timestamp', inplace=True)
-                    
-                    # 將數據重採樣為指定的時間間隔，並取平均值
-                    resampled_data = interpolated_data.resample(interval_value).mean()
-                    
+                    # 處理非數字型數據（如 AFEnumerationValue），嘗試將它們轉換成字符串或其他可用數值
+                    def convert_to_numeric(val):
+                        try:
+                            return float(val)
+                        except (ValueError, TypeError):
+                            return None  # 如果無法轉換，返回 None
+
+                    recorded_data[p.name] = recorded_data[p.name].apply(convert_to_numeric)
+
+                    # 設定時間戳
+                    recorded_data['Timestamp'] = pd.to_datetime(recorded_data['Timestamp'])
+                    recorded_data.set_index('Timestamp', inplace=True)
+
+                    # 根據 interval 重新取樣數據
+                    interval_mapping = {
+                        "d": "1D",  # 天
+                        "h": "1H",  # 小時
+                        "m": "1T",  # 分鐘
+                        "s": "1S",  # 秒
+                    }
+
+                    if interval in interval_mapping:
+                        # 使用 pandas 的 resample 來根據選擇的 interval 重新取樣數據
+                        resampled_data = recorded_data.resample(interval_mapping[interval]).mean()
+                    else:
+                        resampled_data = recorded_data  # 如果沒有指定 interval，使用原始數據
+
                     series.append(resampled_data)
 
                 # 合併所有 PI tags 數據
@@ -225,11 +242,11 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
                 for tag in tags:
                     if tag in df.columns:
                         fig.add_trace(go.Scatter(x=df["Timestamp"], 
-                                                 y=df[tag], 
-                                                 mode='lines', 
-                                                 name=tag,
-                                                 line=dict(color=fig['layout']['colorway'][axis_count + 1]),  
-                                                 yaxis='y' + str(axis_count)))
+                                                y=df[tag], 
+                                                mode='lines', 
+                                                name=tag,
+                                                line=dict(color=fig['layout']['colorway'][axis_count + 1]),  
+                                                yaxis='y' + str(axis_count)))
 
                         fig.update_layout(
                             **{'yaxis' + str(axis_count): dict(
@@ -241,12 +258,13 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
                                 position=1-(0.04*(axis_count-1))
                             )}
                         )
-                        
+
                         axis_count += 1
 
     fig.update_layout(
         title=f'{tank} Performance and Process trend',
         xaxis=dict(domain=[0, 1-((axis_count-2)*0.04)], title='Date'),
+        yaxis=dict(tickformat='.1%'),
         yaxis_title='Value',
         height=500,
         margin=dict(b=0, l=0, r=90, t=90+30*(axis_count/3)),
