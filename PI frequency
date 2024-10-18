@@ -1,11 +1,1 @@
-import PIconnect as PI
-
-servername = "grape"
-with PI.PIServer(server=servername) as server:
-    tag_name = "你的Tag名稱"
-    point = server.search(tag_name)[0]
-    print(f"Point Name: {point.name}")
-    print(f"Scan Rate: {point.attributes['scan rate']}")  # 查詢記錄頻率
-    print(f"Step: {point.attributes['step']}")  # 是否是步階型數據
-    print(f"Exception Deviation: {point.attributes['excdev']}")  # 查詢 Exception Deviation
-    print(f"Compression Deviation: {point.attributes['compdev']}")  # 查詢 Compression Deviation
+AttributeError: 'PIPoint' object has no attribute 'attributes'
