@@ -1,1 +1,20 @@
-AttributeError: 'PIPoint' object has no attribute 'attributes'
+import PIconnect as PI
+
+# 連接到 PI Server
+servername = "grape"
+with PI.PIServer(server=servername) as server:
+    # 指定要查詢的 Tag 名稱
+    tag_name = "你的Tag名稱"
+    
+    # 搜索 PI 點
+    point = server.search(tag_name)[0]
+    
+    # 查詢屬性
+    attributes = point.get_attributes(["step", "excdev", "compdev", "scan"])
+    
+    # 顯示屬性值
+    print(f"Point Name: {point.name}")
+    print(f"Step: {attributes['step']}")  # 是否是步階型數據
+    print(f"Exception Deviation: {attributes['excdev']}")  # 查詢 Exception Deviation
+    print(f"Compression Deviation: {attributes['compdev']}")  # 查詢 Compression Deviation
+    print(f"Scan Rate: {attributes['scan']}")  # 查詢掃描頻率
