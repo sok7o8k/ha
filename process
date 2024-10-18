@@ -9,6 +9,7 @@ import base64
 import io
 from dash_auth import BasicAuth
 import PIconnect as PI
+from datetime import datetime, timedelta
 
 PI.PIConfig.DEFAULT_TIMEZONE = "Asia/Taipei"
 
@@ -55,9 +56,9 @@ app.layout = dbc.Container([
                     dcc.DatePickerRange(
                         id='date-picker',
                         min_date_allowed=df_cleaned['Date'].min(),
-                        max_date_allowed=df_cleaned['Date'].max(),
+                        max_date_allowed=(datetime.now() + timedelta(days=1)).date(),
                         start_date=df_cleaned['Date'].min(),
-                        end_date=df_cleaned['Date'].max()
+                        end_date=(datetime.now() + timedelta(days=1)).date()
                     ),
                 ])
             ], className="mb-3"),
