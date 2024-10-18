@@ -1,20 +1,27 @@
 import PIconnect as PI
+from datetime import datetime, timedelta
+import pandas as pd
 
-# 連接到 PI Server
+# 設定 PI Server
 servername = "grape"
 with PI.PIServer(server=servername) as server:
     # 指定要查詢的 Tag 名稱
     tag_name = "你的Tag名稱"
-    
+
     # 搜索 PI 點
     point = server.search(tag_name)[0]
-    
-    # 查詢屬性
-    attributes = point.get_attributes(["step", "excdev", "compdev", "scan"])
-    
-    # 顯示屬性值
-    print(f"Point Name: {point.name}")
-    print(f"Step: {attributes['step']}")  # 是否是步階型數據
-    print(f"Exception Deviation: {attributes['excdev']}")  # 查詢 Exception Deviation
-    print(f"Compression Deviation: {attributes['compdev']}")  # 查詢 Compression Deviation
-    print(f"Scan Rate: {attributes['scan']}")  # 查詢掃描頻率
+
+    # 定義查詢時間範圍
+    end_time = datetime.now()
+    start_time = end_time - timedelta(days=1)  # 查詢過去一天的數據
+
+    # 提取數據點
+    recorded_data = point.recorded_values(start_time=start_time, end_time=end_time)
+
+    # 將數據轉為 DataFrame
+    df = pd.DataFrame(recorded_data).reset_index()
+    df.columns = ['Timestamp', 'Value']
+
+    # 計算時間差來推斷記錄頻率
+    df['Time_Difference'] = df['Timestamp'].diff().dt.total_seconds()
+    print(df.head())  # 查看前幾個數據點
