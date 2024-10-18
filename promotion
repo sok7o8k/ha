@@ -1,3 +1,10 @@
-OSIsoft.AF.PI.PIException: [-11091] Event collection exceeded the maximum allowed
-   於 OSIsoft.AF.PI.PIException.ConvertAndThrowException(PIServer piServer, Exception ex, String message)
-   於 OSIsoft.AF.PI.PIPoint.RecordedValues(AFTimeRange timeRange, AFBoundaryType boundaryType, String filterExpression, Boolean includeFilteredValues, Int32 maxCount)
+PS C:\Users\chenk23\Desktop\DT2\Project> & C:/Users/chenk23/AppData/Local/Programs/Python/Python38/python.exe c:/Users/chenk23/Desktop/DT2/Project/M1.py
+OSIsoft(r) AF SDK Version: 2.10.0.8628
+Traceback (most recent call last):
+  File "c:/Users/chenk23/Desktop/DT2/Project/M1.py", line 21, in <module>
+    with conn.cursor().execute(query) as cur:
+  File "C:\Users\chenk23\AppData\Local\Programs\Python\Python38\lib\site-packages\pyadomd\pyadomd.py", line 67, in execute 
+    self._reader = self._cmd.ExecuteReader()
+Microsoft.AnalysisServices.AdomdClient.AdomdErrorResponseException: Invalid query syntax. A valid MDX or DAX query was expected.
+   於 Microsoft.AnalysisServices.AdomdClient.AdomdConnection.XmlaClientProvider.Microsoft.AnalysisServices.AdomdClient.IExecuteProvider.ExecuteTabular(CommandBehavior behavior, ICommandContentProvider contentProvider, AdomdPropertyCollection commandProperties, IDataParameterCollection parameters)
+   於 Microsoft.AnalysisServices.AdomdClient.AdomdCommand.ExecuteReader(CommandBehavior behavior)
