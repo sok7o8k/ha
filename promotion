@@ -8,3 +8,4 @@ Traceback (most recent call last):
 Microsoft.AnalysisServices.AdomdClient.AdomdErrorResponseException: Invalid query syntax. A valid MDX or DAX query was expected.
    於 Microsoft.AnalysisServices.AdomdClient.AdomdConnection.XmlaClientProvider.Microsoft.AnalysisServices.AdomdClient.IExecuteProvider.ExecuteTabular(CommandBehavior behavior, ICommandContentProvider contentProvider, AdomdPropertyCollection commandProperties, IDataParameterCollection parameters)
    於 Microsoft.AnalysisServices.AdomdClient.AdomdCommand.ExecuteReader(CommandBehavior behavior)
+https://tcl-mobile.pro.typeform.com/Hami30
