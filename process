@@ -150,48 +150,6 @@ def update_tags_options(Tank_ID):
     combined_tags = csv_tags + pi_tags
     return combined_tags
 
-def query_pi_data_in_chunks(tags, start_date, end_date, interval, max_count_per_query=100):
-    all_series = []
-    delta = timedelta(hours=1)  # 每次查詢一天的數據
-    current_start = start_date
-
-    while current_start < end_date:
-        current_end = min(current_start + delta, end_date)
-
-        with PI.PIServer(server="grape") as server:
-            points = server.search(tags)
-            if len(points) > 0:
-                series = []
-                for p in points:
-                    data = p.recorded_values(
-                        start_time=current_start,
-                        end_time=current_end,
-                        maxCount=max_count_per_query
-                    )
-                    recorded_data = pd.DataFrame(data).reset_index()
-                    recorded_data.columns = ['Timestamp', p.name]
-
-                    def convert_to_numeric(val):
-                        try:
-                            return float(val)
-                        except (ValueError, TypeError):
-                            return None
-
-                    recorded_data[p.name] = recorded_data[p.name].apply(convert_to_numeric)
-                    recorded_data['Timestamp'] = pd.to_datetime(recorded_data['Timestamp'])
-                    recorded_data.set_index('Timestamp', inplace=True)
-                    series.append(recorded_data)
-
-                df = pd.concat(series, axis=1)
-                all_series.append(df)
-
-        current_start = current_end
-
-    if all_series:
-        combined_df = pd.concat(all_series)
-        return combined_df
-    return pd.DataFrame()
-
 
 from plotly.subplots import make_subplots
 
