@@ -1,1 +1,22 @@
-TypeError: summary() got an unexpected keyword argument 'summary_type'
+import PIconnect as PI
+from datetime import datetime
+
+# Connect to the PI server
+servername = "grape"  # Replace with your actual PI server name
+with PI.PIServer(server=servername) as server:
+    # Search for the tag you're interested in
+    tag = server.search('your_tag')[0]  # Replace 'your_tag' with your actual PI tag
+
+    # Define the time range
+    start_time = datetime(2024, 1, 1)
+    end_time = datetime(2024, 1, 2)
+    
+    # Retrieve the time-weighted average using interpolated_summary
+    summary = tag.interpolated_summary(
+        start_time=start_time,
+        end_time=end_time,
+        summary_type=PI.AF.SummaryType.TimeWeightedAverage  # Use TimeWeightedAverage summary type
+    )
+
+    # Print the result
+    print(f"Time-weighted average for {tag.name} from {start_time} to {end_time}: {summary}")
