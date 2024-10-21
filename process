@@ -35,12 +35,18 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
             points = server.search(tags)
             if len(points) > 0:
                 series = []
+                interval_mapping = {
+                    "d": "1d",  # Day
+                    "h": "1h",  # Hour
+                    "m": "1m"   # Minute
+                }
+
                 for p in points:
                     # 使用 interpolated 方法來獲取插值數據
                     data = p.interpolated_values(
                         start_time=start_date,
                         end_time=end_date,
-                        interval=interval
+                        interval=interval_mapping.get(interval, "1d")  # 預設為1天
                     )
 
                     # 提取時間和數據
