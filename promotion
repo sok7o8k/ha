@@ -1,2 +1,10 @@
-    _interval = AF.Time.AFTimeSpan.Parse(interval)
-TypeError: No method matches given arguments for AFTimeSpan.Parse: (<class 'datetime.timedelta'>)
+from OSIsoft.AF.Time import AFTimeSpan
+from datetime import timedelta
+
+# 你的 timedelta 对象
+interval = timedelta(minutes=15)
+
+# 创建 AFTimeSpan 实例，使用 timedelta 的总秒数
+_interval = AFTimeSpan(interval.total_seconds())
+
+print(_interval)
