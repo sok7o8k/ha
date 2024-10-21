@@ -1,4 +1,22 @@
-System.FormatException: The 'd' token in the string 'd' was not expected.
-   於 OSIsoft.AF.Time.AFTimeSpan.FormatError(String input, Char token, Boolean throwErrors, AFTimeSpan& result)
-   於 OSIsoft.AF.Time.AFTimeSpan.TryParseImpl(String input, Int32 startlocation, IFormatProvider provider, NumberFormatInfo numberFormat, DateTimeFormatInfo dateTimeFormat, Boolean throwErrors, AFTimeSpan& result)
-   於 OSIsoft.AF.Time.AFTimeSpan.Parse(String input, AFTimeZone timeZone, IFormatProvider provider)
+import PIconnect as PI
+from datetime import datetime
+
+# Connect to the PI server
+servername = "grape"  # Replace with your actual PI server name
+with PI.PIServer(server=servername) as server:
+    # Search for the tag you're interested in
+    tag = server.search('your_tag')[0]  # Replace 'your_tag' with your actual PI tag
+
+    # Define the time range
+    start_time = datetime(2024, 1, 1)
+    end_time = datetime(2024, 1, 2)
+    
+    # Retrieve the time-weighted average using the 'summary' method
+    summary = tag.summary(
+        start_time=start_time,
+        end_time=end_time,
+        summary_type='TimeWeightedAverage'  # Can use 'Total', 'Average', 'Maximum', etc.
+    )
+
+    # Print the result
+    print(f"Time-weighted average for {tag.name} from {start_time} to {end_time}: {summary}")
