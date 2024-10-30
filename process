@@ -185,30 +185,23 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
 
     fig.update_layout(barmode='stack')
 
-    # 添加PI Tags的趨勢線 (使用 interpolated_values)
+        # 添加PI Tags的趨勢線
     if tags and start_date and end_date and interval:
         servername = "grape"
         with PI.PIServer(server=servername) as server:
             points = server.search(tags)
             if len(points) > 0:
                 series = []
-                interval_mapping = {
-                    "d": "1d",  # Day
-                    "h": "1h",  # Hour
-                    "m": "1m"   # Minute
-                }
-
                 for p in points:
-                    # 使用 interpolated 方法來獲取插值數據
-                    data = p.interpolated_values(
+                    # 使用 recorded 方法來獲取原始數據
+                    data = p.recorded_values(
                         start_time=start_date,
-                        end_time=end_date,
-                        interval=interval_mapping.get(interval, "1d")  # 預設為1天
+                        end_time=end_date
                     )
 
                     # 提取時間和數據
-                    interpolated_data = pd.DataFrame(data).reset_index()
-                    interpolated_data.columns = ['Timestamp', p.name]
+                    recorded_data = pd.DataFrame(data).reset_index()
+                    recorded_data.columns = ['Timestamp', p.name]
 
                     # 處理非數字型數據（如 AFEnumerationValue），嘗試將它們轉換成字符串或其他可用數值
                     def convert_to_numeric(val):
@@ -217,13 +210,27 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
                         except (ValueError, TypeError):
                             return None  # 如果無法轉換，返回 None
 
-                    interpolated_data[p.name] = interpolated_data[p.name].apply(convert_to_numeric)
+                    recorded_data[p.name] = recorded_data[p.name].apply(convert_to_numeric)
 
                     # 設定時間戳
-                    interpolated_data['Timestamp'] = pd.to_datetime(interpolated_data['Timestamp'])
-                    interpolated_data.set_index('Timestamp', inplace=True)
+                    recorded_data['Timestamp'] = pd.to_datetime(recorded_data['Timestamp'])
+                    recorded_data.set_index('Timestamp', inplace=True)
 
-                    series.append(interpolated_data)
+                    # 根據 interval 重新取樣數據
+                    interval_mapping = {
+                        "d": "1D",  # 天
+                        "h": "1H",  # 小時
+                        "m": "1T",  # 分鐘
+                        "s": "1S",  # 秒
+                    }
+
+                    if interval in interval_mapping:
+                        # 使用 pandas 的 resample 來根據選擇的 interval 重新取樣數據
+                        resampled_data = recorded_data.resample(interval_mapping[interval]).mean()
+                    else:
+                        resampled_data = recorded_data  # 如果沒有指定 interval，使用原始數據
+
+                    series.append(resampled_data)
 
                 # 合併所有 PI tags 數據
                 df = pd.concat(series, axis=1)
@@ -247,7 +254,7 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
                                 titlefont=dict(color=fig['layout']['colorway'][axis_count + 1]),
                                 tickfont=dict(color=fig['layout']['colorway'][axis_count + 1]),
                                 anchor="free",
-                                overlaying='y',
+                                overlaying= 'y',
                                 side="right",
                                 position=1-(0.04*(axis_count-1))
                             )}
@@ -270,8 +277,6 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
     )
 
     return fig
-
-
 
 if __name__ == '__main__':
     app.run_server(debug=True, port='7788')
