@@ -1,7 +1,31 @@
-sqlalchemy.exc.ProgrammingError: (pyodbc.ProgrammingError) ('42S02', "[42S02] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Invalid object name 'PI_REPLICATION.dbo.tags_table'. (208) (SQLExecDirectW)")
-[SQL: 
-        SELECT tag
-        FROM PI_REPLICATION.dbo.tags_table
-        WHERE tank_id LIKE 'TC01%'
-    ]
-(Background on this error at: https://sqlalche.me/e/20/f405)
+@app.callback(
+    Output("tags", "options"),
+    [Input("tank-picker", "value"), Input("interval", "value")]
+)
+def update_tags_options(Tank_ID, interval):
+    # 根據 interval 選擇不同的資料表
+    if interval == "d":
+        tables = ["PI_REPLICATION.dbo.Summary_Daily_AVG_TC_PEM_Melting_1", 
+                  "PI_REPLICATION.dbo.Summary_Daily_AVG_TC_PEM_Melting_2"]
+    elif interval == "h":
+        tables = ["PI_REPLICATION.dbo.Summary_Hour_AVG_TC_PEM_Melting_1", 
+                  "PI_REPLICATION.dbo.Summary_Hour_AVG_TC_PEM_Melting_2"]
+    else:
+        raise ValueError("Unsupported interval for SQL data retrieval")
+
+    # 合併多個表的 tags 結果
+    all_tags = []
+    for table_name in tables:
+        query = f"""
+            SELECT DISTINCT tag
+            FROM {table_name}
+            WHERE tank_id LIKE '{Tank_ID}%'
+        """
+        tags_df = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
+        all_tags.extend(tags_df['tag'].tolist())
+    
+    # 去除重複的 tags
+    unique_tags = list(set(all_tags))
+
+    # 返回可供選擇的 tags 選項
+    return [{'label': tag, 'value': tag} for tag in unique_tags]
