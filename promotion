@@ -1,24 +1,7 @@
-from sqlalchemy import create_engine
-
-def get_server(query, server, database):
-    engine = sqlalchemy.create_engine(f'mssql+pyodbc://{server}/{database}?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server')
-    with engine.connect() as conn:
-        df = pd.read_sql_query(query, conn)
-    engine.dispose()
-    return df
-
-@app.callback(
-    Output("tags", "options"), 
-    Input("tank-picker", "value")
-)
-def update_tags_options(Tank_ID):
-    # SQL查询获取tags列表
-    query = f"""
+sqlalchemy.exc.ProgrammingError: (pyodbc.ProgrammingError) ('42S02', "[42S02] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Invalid object name 'PI_REPLICATION.dbo.tags_table'. (208) (SQLExecDirectW)")
+[SQL: 
         SELECT tag
         FROM PI_REPLICATION.dbo.tags_table
-        WHERE tank_id LIKE '{Tank_ID}%'
-    """
-    tags_df = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
-    sql_tags = tags_df['tag'].tolist()
-
-    return [{'label': tag, 'value': tag} for tag in sql_tags]
+        WHERE tank_id LIKE 'TC01%'
+    ]
+(Background on this error at: https://sqlalche.me/e/20/f405)
