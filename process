@@ -1,159 +1,31 @@
-from sys import path
-import plotly.graph_objects as go
-import plotly.express as px
-from dash import Dash, html, dcc, Input, Output, State, dash_table
-import dash_bootstrap_components as dbc
-from dash.exceptions import PreventUpdate
-import pandas as pd
-import base64
-import io
-from dash_auth import BasicAuth
-import PIconnect as PI
-from datetime import datetime, timedelta
+def get_tag_data_from_sql(tag, start_date, end_date, interval):
+    # 根據選擇的 tag 在指定的時間範圍內從 SQL Server 抓取數據
+    query = f"""
+        SELECT Timestamp, Value
+        FROM PI_REPLICATION.dbo.tag_data_table
+        WHERE tag = '{tag}'
+        AND Timestamp BETWEEN '{start_date}' AND '{end_date}'
+        ORDER BY Timestamp
+    """
+    df = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
+    
+    # 將 Timestamp 轉換為 datetime 格式
+    df['Timestamp'] = pd.to_datetime(df['Timestamp'])
+    df.set_index('Timestamp', inplace=True)
 
-PI.PIConfig.DEFAULT_TIMEZONE = "Asia/Taipei"
+    # 根據 interval (日、時或分) 重新取樣數據
+    interval_mapping = {
+        "d": "1D",  # 天
+        "h": "1H",  # 小時
+        "m": "1T"   # 分鐘
+    }
+    if interval in interval_mapping:
+        resampled_data = df.resample(interval_mapping[interval]).mean()
+    else:
+        resampled_data = df
 
-path.append(
-    "C:\\Users\\chenk23\\Desktop\\DT2\\20240507\\03_Databases"
-)  # added to the path BEFORE importing the pyadomd package
+    return resampled_data
 
-from pyadomd import Pyadomd
-import pandas as pd
-
-conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
-query = "   SELECT NON EMPTY { [Measures].[M_Defect Loss%] } ON COLUMNS, NON EMPTY { ([Time].[Time YQMD].[Date].ALLMEMBERS * [Tank].[Tank ID].[Tank ID].ALLMEMBERS * [Defect Tracking].[Defect Tracking Hierarchy].[Defect ID].ALLMEMBERS ) } DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME ON ROWS FROM ( SELECT ( { [Time].[Year].&[2024] } ) ON COLUMNS FROM ( SELECT ( { [Defect Tracking].[Defect Tracking Hierarchy].[Defect Group].&[M_Melt Loss] } ) ON COLUMNS FROM ( SELECT ( { [Production Type].[Production Type Hierarchy].[Production Type].&[1], [Production Type].[Production Type Hierarchy].[Production Type].&[2] } ) ON COLUMNS FROM ( SELECT ( { [Plant].[Plant Hierarchy].[Plant_ID].&[TC] } ) ON COLUMNS FROM ( SELECT ( { [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], [Tank].[Tank ID].&[TC03], [Tank].[Tank ID].&[TC04], [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], [Tank].[Tank ID].&[TC07], [Tank].[Tank ID].&[TC08], [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], [Tank].[Tank ID].&[TC11], [Tank].[Tank ID].&[TC12], [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], [Tank].[Tank ID].&[TC15], [Tank].[Tank ID].&[TC16], [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], [Tank].[Tank ID].&[TC19], [Tank].[Tank ID].&[TC20], [Tank].[Tank ID].&[TC21] } ) ON COLUMNS FROM [PPD_Actual]))))) WHERE ( [Plant].[Plant Hierarchy].[Plant_ID].&[TC], [Production Type].[Production Type Hierarchy].CurrentMember, [Time].[Year].&[2024] ) CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS"
-
-with Pyadomd(conn_str) as conn:
-    with conn.cursor().execute(query) as cur:
-        df = pd.DataFrame(cur.fetchone(), columns=[i.name for i in cur.description])
-
-# Clean this table!
-df_cleaned = df.loc[
-    :, [c for c in df.columns if c[-20:] != "[MEMBER_UNIQUE_NAME]"]
-]  # 去掉"[MEMBER_UNIQUE_NAME]"的columns
-df_cleaned.columns = [
-    c[:-17] if c[-16:] == "[MEMBER_CAPTION]" else c for c in df_cleaned.columns
-]  # 去掉欄位中的"[MEMBER_CAPTION]"
-df_cleaned.columns = [c.split(".")[-1][1:-1] for c in df_cleaned.columns]
-
-import dash
-import dash_core_components as dcc
-import dash_html_components as html
-from dash.dependencies import Input, Output, State
-
-# 创建 Dash 应用
-app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP])
-
-tanks = df_cleaned["Tank ID"].unique()
-defects = df_cleaned["Defect ID"].unique()
-
-app.layout = dbc.Container([
-    dbc.Row([
-        dbc.Col([
-            dbc.Card([
-                dbc.CardHeader("選擇日期"),
-                dbc.CardBody([
-                    dcc.DatePickerRange(
-                        id='date-picker',
-                        min_date_allowed=df_cleaned['Date'].min(),
-                        max_date_allowed=(datetime.now() + timedelta(days=1)).date(),
-                        start_date=df_cleaned['Date'].min(),
-                        end_date=(datetime.now() + timedelta(days=1)).date()
-                    ),
-                ])
-            ], className="mb-3"),
-            dbc.Card([
-                dbc.CardHeader("選擇Tank"),
-                dbc.CardBody([
-                    dcc.Dropdown(
-                        id='tank-picker',
-                        options=[{'label': i, 'value': i} for i in tanks],
-                        value=tanks[0]
-                    ),
-                ]),
-            ], className="mb-3"),
-            dbc.Card([
-                dbc.CardHeader("選擇Defect"),
-                dbc.CardBody([
-                    dcc.Dropdown(
-                        id='defect-picker',
-                        options=[{'label': i, 'value': i} for i in defects],
-                        value=defects[0]
-                    ),
-                ]),
-            ], className="mb-3"),
-        ], width=4),
-    ]),
-    dbc.Row([
-    dbc.Col([
-        dbc.Card([
-            dbc.CardHeader("選擇Pi Data取值頻率"),
-            dbc.CardBody([
-                dbc.RadioItems(
-                    options=[
-                        {"label": "Day", "value": "d"},
-                        {"label": "Hour", "value": "h"},
-                        {"label": "Minute", "value": "m"}
-                    ],
-                    value="d",
-                    inline=True,
-                    id="interval",
-                    className="mb-3",
-                ),
-            ]),
-        ], className="mb-3"),
-    ], width=6),
-    ]),
-    dbc.Row([
-    dbc.Col([
-        dbc.Card([
-            dbc.CardHeader("選擇PI Tags"),
-            dbc.CardBody([
-                html.Div([
-                    dcc.Dropdown(
-                        options=[],
-                        multi=True,
-                        id="tags",
-                        className="mb-3",
-                    ),
-                ]),
-            ]),
-        ], className="mb-3"),
-    ], width=6)
-    ]),
-        dbc.Row([
-        dbc.Col([
-            dbc.Card([
-                dbc.CardBody([
-                    dcc.Graph(
-                        id="combined-graph",
-                        style={"height": "500px"},
-                    ),
-                ]),
-            ], className="mb-3"),
-        ], width=11),
-    ]),
-])
-
-@app.callback(
-    Output("tags", "options"), 
-    Input("tank-picker", "value")
-)
-def update_tags_options(Tank_ID):
-    tags_df = pd.read_csv("tags.csv")
-    csv_tags = tags_df.loc[tags_df["tank"].str.startswith(Tank_ID), "tag"].tolist()
-
-    with PI.PIServer(server="grape") as server:
-        points = server.search(f'*{Tank_ID}*')
-        pi_tags = [p.name for p in points]
-
-    combined_tags = csv_tags + pi_tags
-    return combined_tags
-
-
-from plotly.subplots import make_subplots
-
-# ...
 
 @app.callback(
     Output("combined-graph", "figure"),
@@ -164,11 +36,11 @@ from plotly.subplots import make_subplots
     Input("tank-picker", "value"),
 )
 def update_combined_graph(tags, start_date, end_date, interval, tank):
-    # 創建空的圖表
+    # 建立空白的圖表
     fig = go.Figure(layout=dict(colorway=px.colors.qualitative.Plotly))
     axis_count = 2
 
-    # 堆疊柱狀圖部分
+    # 堆疊柱狀圖 - 缺陷數據
     start_date = pd.to_datetime(start_date)
     end_date = pd.to_datetime(end_date)
     filtered_df = df_cleaned[
@@ -185,90 +57,43 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
 
     fig.update_layout(barmode='stack')
 
-        # 添加PI Tags的趨勢線
+    # 添加 SQL tags 的趨勢線
     if tags and start_date and end_date and interval:
-        servername = "grape"
-        with PI.PIServer(server=servername) as server:
-            points = server.search(tags)
-            if len(points) > 0:
-                series = []
-                for p in points:
-                    # 使用 recorded 方法來獲取原始數據
-                    data = p.recorded_values(
-                        start_time=start_date,
-                        end_time=end_date
-                    )
+        for tag in tags:
+            # 依 tag、日期範圍和 interval 從 SQL 抓取數據
+            tag_data = get_tag_data_from_sql(tag, start_date, end_date, interval)
 
-                    # 提取時間和數據
-                    recorded_data = pd.DataFrame(data).reset_index()
-                    recorded_data.columns = ['Timestamp', p.name]
+            if not tag_data.empty:
+                # 為 tag 數據添加趨勢線
+                fig.add_trace(go.Scatter(
+                    x=tag_data.index,
+                    y=tag_data['Value'],
+                    mode='lines',
+                    name=tag,
+                    line=dict(color=fig['layout']['colorway'][axis_count + 1]),
+                    yaxis='y' + str(axis_count)
+                ))
 
-                    # 處理非數字型數據（如 AFEnumerationValue），嘗試將它們轉換成字符串或其他可用數值
-                    def convert_to_numeric(val):
-                        try:
-                            return float(val)
-                        except (ValueError, TypeError):
-                            return None  # 如果無法轉換，返回 None
-
-                    recorded_data[p.name] = recorded_data[p.name].apply(convert_to_numeric)
-
-                    # 設定時間戳
-                    recorded_data['Timestamp'] = pd.to_datetime(recorded_data['Timestamp'])
-                    recorded_data.set_index('Timestamp', inplace=True)
-
-                    # 根據 interval 重新取樣數據
-                    interval_mapping = {
-                        "d": "1D",  # 天
-                        "h": "1H",  # 小時
-                        "m": "1T",  # 分鐘
-                        "s": "1S",  # 秒
-                    }
-
-                    if interval in interval_mapping:
-                        # 使用 pandas 的 resample 來根據選擇的 interval 重新取樣數據
-                        resampled_data = recorded_data.resample(interval_mapping[interval]).mean()
-                    else:
-                        resampled_data = recorded_data  # 如果沒有指定 interval，使用原始數據
-
-                    series.append(resampled_data)
-
-                # 合併所有 PI tags 數據
-                df = pd.concat(series, axis=1)
-
-                # 處理時間格式
-                df['Timestamp'] = df.index
-                df['Timestamp'] = pd.to_datetime(df['Timestamp'])
-
-                axis_count = 2
-                for tag in tags:
-                    if tag in df.columns:
-                        fig.add_trace(go.Scatter(x=df["Timestamp"], 
-                                                y=df[tag], 
-                                                mode='lines', 
-                                                name=tag,
-                                                line=dict(color=fig['layout']['colorway'][axis_count + 1]),  
-                                                yaxis='y' + str(axis_count)))
-
-                        fig.update_layout(
-                            **{'yaxis' + str(axis_count): dict(
-                                titlefont=dict(color=fig['layout']['colorway'][axis_count + 1]),
-                                tickfont=dict(color=fig['layout']['colorway'][axis_count + 1]),
-                                anchor="free",
-                                overlaying= 'y',
-                                side="right",
-                                position=1-(0.04*(axis_count-1))
-                            )}
-                        )
-
-                        axis_count += 1
+                # 為每個 tag 配置額外的 y 軸
+                fig.update_layout(
+                    **{'yaxis' + str(axis_count): dict(
+                        titlefont=dict(color=fig['layout']['colorway'][axis_count + 1]),
+                        tickfont=dict(color=fig['layout']['colorway'][axis_count + 1]),
+                        anchor="free",
+                        overlaying='y',
+                        side="right",
+                        position=1 - (0.04 * (axis_count - 1))
+                    )}
+                )
+                axis_count += 1
 
     fig.update_layout(
         title=f'{tank} Performance and Process trend',
-        xaxis=dict(domain=[0, 1-((axis_count-2)*0.04)], title='Date'),
+        xaxis=dict(domain=[0, 1 - ((axis_count - 2) * 0.04)], title='Date'),
         yaxis=dict(tickformat='.1%'),
         yaxis_title='Value',
         height=500,
-        margin=dict(b=0, l=0, r=90, t=90+30*(axis_count/3)),
+        margin=dict(b=0, l=0, r=90, t=90 + 30 * (axis_count / 3)),
         dragmode='zoom',
         legend_title_text=None,
         legend=dict(
@@ -277,6 +102,3 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
     )
 
     return fig
-
-if __name__ == '__main__':
-    app.run_server(debug=True, port='7788')
