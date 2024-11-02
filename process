@@ -170,12 +170,11 @@ def update_tags_options(Tank_ID, interval):
         """
         tags_df = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
         print(tags_df.columns)
-        for row in tags_df.values:
-            all_tags.extend(row)
+        all_tags.extend(tags_df.columns)
     
     # 去除重複的 tags
     unique_tags = list(set(all_tags))
-    return unique_tags
+    return [{'label':tag, 'value':tag } for tag in unique_tags]
 
 
 from plotly.subplots import make_subplots
@@ -197,11 +196,11 @@ def get_tag_data_from_sql(tag, start_date, end_date, interval):
     all_data = []
     for table_name in tables:
         query = f"""
-            SELECT Timestamp, Value
+            SELECT *
             FROM {table_name}
             WHERE tag = '{tag}'
-            AND Timestamp BETWEEN '{start_date}' AND '{end_date}'
-            ORDER BY Timestamp
+            AND Data_Time BETWEEN '{start_date}' AND '{end_date}'
+            ORDER BY Data_Time
         """
         data = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
         all_data.append(data)
@@ -210,8 +209,8 @@ def get_tag_data_from_sql(tag, start_date, end_date, interval):
     df = pd.concat(all_data)
 
     # 轉換 Timestamp 格式並設置為索引
-    df['Timestamp'] = pd.to_datetime(df['Timestamp'])
-    df.set_index('Timestamp', inplace=True)
+    df['Data_Time'] = pd.to_datetime(df['Data_Time'])
+    df.set_index('Data_Time', inplace=True)
 
     # 根據 interval (日、時或分) 重新取樣數據
     interval_mapping = {
