@@ -175,8 +175,7 @@ def update_tags_options(Tank_ID, interval):
     
     # 去除重複的 tags
     unique_tags = list(set(all_tags))
-    # 返回可供選擇的 tags 選項
-    return [{'label': tag, 'value': tag} for tag in unique_tags]
+    return unique_tags
 
 
 from plotly.subplots import make_subplots
