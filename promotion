@@ -1,47 +1,42 @@
-@app.callback(
-    Output("tags", "options"),
-    [Input("tank-picker", "value"), Input("interval", "value")]
-)
-def update_tags_options(Tank_ID, interval):
+def get_tag_data_from_sql(tag, start_date, end_date, interval):
     # 根據 interval 選擇不同的資料表
     if interval == "d":
-        tables = ["PI_REPLICATION.dbo.Summary_Daily_AVG_TC_PEM_Melting_1", 
+        tables = ["PI_REPLICATION.dbo.Summary_Daily_AVG_TC_PEM_Melting_1",
                   "PI_REPLICATION.dbo.Summary_Daily_AVG_TC_PEM_Melting_2"]
     elif interval == "h":
-        tables = ["PI_REPLICATION.dbo.Summary_Hour_AVG_TC_PEM_Melting_1", 
+        tables = ["PI_REPLICATION.dbo.Summary_Hour_AVG_TC_PEM_Melting_1",
                   "PI_REPLICATION.dbo.Summary_Hour_AVG_TC_PEM_Melting_2"]
     else:
         raise ValueError("Unsupported interval for SQL data retrieval")
 
-    # 獲取所有有數據的欄位
-    available_tags = []
+    # 從多個表格獲取數據並合併
+    all_data = []
     for table_name in tables:
-        # 獲取欄位名稱
         query = f"""
-            SELECT COLUMN_NAME
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_NAME = '{table_name.split('.')[-1]}'
-            AND COLUMN_NAME != 'tank_id'
-            AND COLUMN_NAME != 'Data_Time'
+            SELECT Data_Time, [{tag}] AS Value
+            FROM {table_name}
+            WHERE Data_Time BETWEEN '{start_date}' AND '{end_date}'
+            ORDER BY Data_Time
         """
-        
-        columns_df = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
-        columns = columns_df["COLUMN_NAME"].tolist()
+        data = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
+        all_data.append(data)
 
-        # 遍歷所有欄位，僅檢查最後一筆資料是否為空
-        for column in columns:
-            query = f"""
-                SELECT TOP 1 [{column}]
-                FROM {table_name}
-                WHERE tank_id = '{Tank_ID}'
-                ORDER BY Data_Time DESC
-            """
-            result_df = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
+    # 合併所有表格的數據
+    df = pd.concat(all_data)
 
-            # 如果該欄位的最後一筆資料非空，將其添加到 available_tags 中
-            if not result_df.empty and result_df.iloc[0][column] is not None:
-                available_tags.append(column)
+    # 轉換 Data_Time 格式並設置為索引
+    df['Data_Time'] = pd.to_datetime(df['Data_Time'])
+    df.set_index('Data_Time', inplace=True)
 
-    # 去除重複的欄位，並返回選項
-    unique_tags = list(set(available_tags))
-    return [{'label': tag, 'value': tag} for tag in unique_tags]
+    # 根據 interval (日、時或分) 重新取樣數據
+    interval_mapping = {
+        "d": "1D",  # 天
+        "h": "1H",  # 小時
+        "m": "1T"   # 分鐘
+    }
+    if interval in interval_mapping:
+        resampled_data = df.resample(interval_mapping[interval]).mean()
+    else:
+        resampled_data = df
+
+    return resampled_data
