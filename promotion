@@ -1,9 +1,47 @@
-sqlalchemy.exc.ProgrammingError: (pyodbc.ProgrammingError) ('42S22', "[42S22] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Invalid column name 'tag'. (207) (SQLExecDirectW); [42S22] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Invalid column name 'Timestamp'. (207); [42S22] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Invalid column name 'Timestamp'. (207); [42S22] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Invalid column name 'Timestamp'. (207); [42S22] [Microsoft][ODBC Driver 17 for SQL Server][SQL Server]Invalid column name 'Value'. (207)")
-[SQL: 
-            SELECT Timestamp, Value
-            FROM PI_REPLICATION.dbo.Summary_Daily_AVG_TC_PEM_Melting_1
-            WHERE tag = 'SC_COV_TOP_VOLTS'
-            AND Timestamp BETWEEN '2024-01-01 00:00:00' AND '2024-11-03 00:00:00'
-            ORDER BY Timestamp
-        ]
-(Background on this error at: https://sqlalche.me/e/20/f405)
+@app.callback(
+    Output("tags", "options"),
+    [Input("tank-picker", "value"), Input("interval", "value")]
+)
+def update_tags_options(Tank_ID, interval):
+    # 根據 interval 選擇不同的資料表
+    if interval == "d":
+        tables = ["PI_REPLICATION.dbo.Summary_Daily_AVG_TC_PEM_Melting_1", 
+                  "PI_REPLICATION.dbo.Summary_Daily_AVG_TC_PEM_Melting_2"]
+    elif interval == "h":
+        tables = ["PI_REPLICATION.dbo.Summary_Hour_AVG_TC_PEM_Melting_1", 
+                  "PI_REPLICATION.dbo.Summary_Hour_AVG_TC_PEM_Melting_2"]
+    else:
+        raise ValueError("Unsupported interval for SQL data retrieval")
+
+    # 獲取所有有數據的欄位
+    available_tags = []
+    for table_name in tables:
+        # 獲取欄位名稱
+        query = f"""
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = '{table_name.split('.')[-1]}'
+            AND COLUMN_NAME != 'tank_id'
+            AND COLUMN_NAME != 'Data_Time'
+        """
+        
+        columns_df = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
+        columns = columns_df["COLUMN_NAME"].tolist()
+
+        # 遍歷所有欄位，僅檢查最後一筆資料是否為空
+        for column in columns:
+            query = f"""
+                SELECT TOP 1 [{column}]
+                FROM {table_name}
+                WHERE tank_id = '{Tank_ID}'
+                ORDER BY Data_Time DESC
+            """
+            result_df = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
+
+            # 如果該欄位的最後一筆資料非空，將其添加到 available_tags 中
+            if not result_df.empty and result_df.iloc[0][column] is not None:
+                available_tags.append(column)
+
+    # 去除重複的欄位，並返回選項
+    unique_tags = list(set(available_tags))
+    return [{'label': tag, 'value': tag} for tag in unique_tags]
