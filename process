@@ -160,21 +160,38 @@ def update_tags_options(Tank_ID, interval):
     else:
         raise ValueError("Unsupported interval for SQL data retrieval")
 
-    # 合併多個表的 tags 結果
-    all_tags = []
+    # 獲取所有有數據的欄位
+    available_tags = []
     for table_name in tables:
+        # 獲取欄位名稱
         query = f"""
-            SELECT *
-            FROM {table_name}
-            WHERE tank_id LIKE '{Tank_ID}%'
+            SELECT COLUMN_NAME
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_NAME = '{table_name.split('.')[-1]}'
+            AND COLUMN_NAME != 'tank_id'
+            AND COLUMN_NAME != 'Data_Time'
         """
-        tags_df = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
-        print(tags_df.columns)
-        all_tags.extend(tags_df.columns)
-    
-    # 去除重複的 tags
-    unique_tags = list(set(all_tags))
-    return [{'label':tag, 'value':tag } for tag in unique_tags]
+        
+        columns_df = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
+        columns = columns_df["COLUMN_NAME"].tolist()
+
+        # 遍歷所有欄位，僅檢查最後一筆資料是否為空
+        for column in columns:
+            query = f"""
+                SELECT TOP 1 [{column}]
+                FROM {table_name}
+                WHERE tank_id = '{Tank_ID}'
+                ORDER BY Data_Time DESC
+            """
+            result_df = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
+
+            # 如果該欄位的最後一筆資料非空，將其添加到 available_tags 中
+            if not result_df.empty and result_df.iloc[0][column] is not None:
+                available_tags.append(column)
+
+    # 去除重複的欄位，並返回選項
+    unique_tags = list(set(available_tags))
+    return [{'label': tag, 'value': tag} for tag in unique_tags]
 
 
 from plotly.subplots import make_subplots
@@ -196,11 +213,11 @@ def get_tag_data_from_sql(tag, start_date, end_date, interval):
     all_data = []
     for table_name in tables:
         query = f"""
-            SELECT *
+            SELECT Timestamp, Value
             FROM {table_name}
             WHERE tag = '{tag}'
-            AND Data_Time BETWEEN '{start_date}' AND '{end_date}'
-            ORDER BY Data_Time
+            AND Timestamp BETWEEN '{start_date}' AND '{end_date}'
+            ORDER BY Timestamp
         """
         data = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
         all_data.append(data)
@@ -209,8 +226,8 @@ def get_tag_data_from_sql(tag, start_date, end_date, interval):
     df = pd.concat(all_data)
 
     # 轉換 Timestamp 格式並設置為索引
-    df['Data_Time'] = pd.to_datetime(df['Data_Time'])
-    df.set_index('Data_Time', inplace=True)
+    df['Timestamp'] = pd.to_datetime(df['Timestamp'])
+    df.set_index('Timestamp', inplace=True)
 
     # 根據 interval (日、時或分) 重新取樣數據
     interval_mapping = {
