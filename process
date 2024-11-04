@@ -213,11 +213,10 @@ def get_tag_data_from_sql(tag, start_date, end_date, interval):
     all_data = []
     for table_name in tables:
         query = f"""
-            SELECT Timestamp, Value
+            SELECT Data_Time, [{tag}] AS Value
             FROM {table_name}
-            WHERE tag = '{tag}'
-            AND Timestamp BETWEEN '{start_date}' AND '{end_date}'
-            ORDER BY Timestamp
+            WHERE Data_Time BETWEEN '{start_date}' AND '{end_date}'
+            ORDER BY Data_Time
         """
         data = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
         all_data.append(data)
@@ -225,9 +224,9 @@ def get_tag_data_from_sql(tag, start_date, end_date, interval):
     # 合併所有表格的數據
     df = pd.concat(all_data)
 
-    # 轉換 Timestamp 格式並設置為索引
-    df['Timestamp'] = pd.to_datetime(df['Timestamp'])
-    df.set_index('Timestamp', inplace=True)
+    # 轉換 Data_Time 格式並設置為索引
+    df['Data_Time'] = pd.to_datetime(df['Data_Time'])
+    df.set_index('Data_Time', inplace=True)
 
     # 根據 interval (日、時或分) 重新取樣數據
     interval_mapping = {
