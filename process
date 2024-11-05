@@ -196,7 +196,6 @@ def update_tags_options(Tank_ID, interval):
 
 from plotly.subplots import make_subplots
 
-# ...
 def column_exists(table_name, column_name):
     query = f"""
         SELECT COLUMN_NAME
@@ -207,7 +206,7 @@ def column_exists(table_name, column_name):
     result_df = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
     return not result_df.empty
 
-def get_tag_data_from_sql(tag, start_date, end_date, interval):
+def get_tag_data_from_sql(tag, start_date, end_date, interval, tank):
     # 根據 interval 選擇不同的資料表
     if interval == "d":
         tables = ["PI_REPLICATION.dbo.Summary_Daily_AVG_TC_PEM_Melting_1",
@@ -225,10 +224,12 @@ def get_tag_data_from_sql(tag, start_date, end_date, interval):
             print(f"Column '{tag}' does not exist in table '{table_name}'")
             continue  # 跳過該表，繼續檢查其他表
 
+        # 根據選擇的 tank 過濾數據
         query = f"""
             SELECT Data_Time, [{tag}] AS Value
             FROM {table_name}
             WHERE Data_Time BETWEEN '{start_date}' AND '{end_date}'
+            AND tank_id = '{tank}'
             ORDER BY Data_Time
         """
         data = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
@@ -241,7 +242,7 @@ def get_tag_data_from_sql(tag, start_date, end_date, interval):
     df = pd.concat(all_data)
     df['Data_Time'] = pd.to_datetime(df['Data_Time'])
     df.set_index('Data_Time', inplace=True)
-
+    print(df)
     return df
 
 @app.callback(
@@ -253,7 +254,6 @@ def get_tag_data_from_sql(tag, start_date, end_date, interval):
     Input("tank-picker", "value"),
 )
 def update_combined_graph(tags, start_date, end_date, interval, tank):
-    # 建立空白的圖表
     fig = go.Figure(layout=dict(colorway=px.colors.qualitative.Plotly))
     axis_count = 2
 
@@ -277,32 +277,33 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
     # 添加 SQL tags 的趨勢線
     if tags and start_date and end_date and interval:
         for tag in tags:
-            # 依 tag、日期範圍和 interval 從 SQL 抓取數據
-            tag_data = get_tag_data_from_sql(tag, start_date, end_date, interval)
+            # 依 tag、日期範圍、interval 和 tank 從 SQL 抓取數據
+            tag_data = get_tag_data_from_sql(tag, start_date, end_date, interval, tank)
+            tag_min = tag_data['Value'].min()
+            tag_max = tag_data['Value'].max()
+            # 為 tag 數據添加趨勢線
+            fig.add_trace(go.Scatter(
+                x=tag_data.index,
+                y=tag_data['Value'],
+                mode='lines',
+                name=tag,
+                line=dict(color=fig['layout']['colorway'][axis_count + 1]),
+                yaxis='y' + str(axis_count)
+            ))
 
-            if not tag_data.empty:
-                # 為 tag 數據添加趨勢線
-                fig.add_trace(go.Scatter(
-                    x=tag_data.index,
-                    y=tag_data['Value'],
-                    mode='lines',
-                    name=tag,
-                    line=dict(color=fig['layout']['colorway'][axis_count + 1]),
-                    yaxis='y' + str(axis_count)
-                ))
-
-                # 為每個 tag 配置額外的 y 軸
-                fig.update_layout(
-                    **{'yaxis' + str(axis_count): dict(
-                        titlefont=dict(color=fig['layout']['colorway'][axis_count + 1]),
-                        tickfont=dict(color=fig['layout']['colorway'][axis_count + 1]),
-                        anchor="free",
-                        overlaying='y',
-                        side="right",
-                        position=1 - (0.04 * (axis_count - 1))
-                    )}
-                )
-                axis_count += 1
+            # 為每個 tag 配置額外的 y 軸
+            fig.update_layout(
+                **{'yaxis' + str(axis_count): dict(
+                    titlefont=dict(color=fig['layout']['colorway'][axis_count + 1]),
+                    tickfont=dict(color=fig['layout']['colorway'][axis_count + 1]),
+                    overlaying='y',
+                    side="right",
+                    position=1 - (0.04 * (axis_count - 1)),
+                    autorange = True
+                    #range = [tag_min, tag_max]
+                )}
+            )
+            axis_count += 1
 
     fig.update_layout(
         title=f'{tank} Performance and Process trend',
