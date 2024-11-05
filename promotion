@@ -1,9 +1,2 @@
-def column_exists(table_name, column_name):
-    query = f"""
-        SELECT COLUMN_NAME
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_NAME = '{table_name.split('.')[-1]}'
-        AND COLUMN_NAME = '{column_name}'
-    """
-    result_df = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
-    return not result_df.empty
+resampled_data = df.resample(interval_mapping[interval]).mean()
+TypeError: can only concatenate str (not "int") to str
