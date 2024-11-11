@@ -1,22 +1,15 @@
-import PIconnect as PI
-from datetime import datetime, timedelta
+# 計算加權平均值
+time_weighted_sum = 0
+total_time = 0
 
-# 連接到 PI Server
-with PI.PIServer() as server:
-    pi_point = server.tag("YourPITag")  # 替換成您的 PI Tag 名稱
+for i in range(len(values) - 1):
+    current_value = values[i].value
+    next_value = values[i + 1].value
+    time_diff = (values[i + 1].timestamp - values[i].timestamp).total_seconds()
+    
+    # 加權計算
+    time_weighted_sum += (current_value + next_value) / 2 * time_diff
+    total_time += time_diff
 
-    # 設定時間範圍
-    start_time = datetime.now() - timedelta(days=1)  # 1 天前
-    end_time = datetime.now()  # 現在
-
-    # 使用 summary 方法計算時間加權平均
-    twa_summary = pi_point.summary(
-        start_time=start_time,
-        end_time=end_time,
-        calculation="average",
-        weighting="time-weighted"  # 指定加權方式
-    )
-
-    # 取得時間加權平均值
-    time_weighted_avg = twa_summary.value
-    print("Time-Weighted Average:", time_weighted_avg)
+time_weighted_average = time_weighted_sum / total_time if total_time > 0 else None
+print("Time-Weighted Average:", time_weighted_average)
