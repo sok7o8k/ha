@@ -1,15 +1,1 @@
-# 計算加權平均值
-time_weighted_sum = 0
-total_time = 0
-
-for i in range(len(values) - 1):
-    current_value = values[i].value
-    next_value = values[i + 1].value
-    time_diff = (values[i + 1].timestamp - values[i].timestamp).total_seconds()
-    
-    # 加權計算
-    time_weighted_sum += (current_value + next_value) / 2 * time_diff
-    total_time += time_diff
-
-time_weighted_average = time_weighted_sum / total_time if total_time > 0 else None
-print("Time-Weighted Average:", time_weighted_average)
+TypeError: unsupported operand type(s) for +: 'float' and 'AFEnumerationValue'
