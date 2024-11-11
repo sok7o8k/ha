@@ -48,6 +48,15 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
                     # 將數據轉換為 DataFrame 並重新設置索引
                     interpolated_data = pd.DataFrame(data).reset_index()
                     interpolated_data.columns = ['Timestamp', p.name]
+                    
+                    # 將非數字型資料轉換為 None
+                    def convert_to_numeric(val):
+                        try:
+                            return float(val)
+                        except (ValueError, TypeError):
+                            return None  # 如果無法轉換，返回 None
+                    
+                    interpolated_data[p.name] = interpolated_data[p.name].apply(convert_to_numeric)
                     interpolated_data['Timestamp'] = pd.to_datetime(interpolated_data['Timestamp'])
                     interpolated_data.set_index('Timestamp', inplace=True)
 
@@ -100,8 +109,4 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
         dragmode='zoom',
         legend_title_text=None,
         legend=dict(
-            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
-        ),
-    )
-
-    return fig  # 回傳更新後的圖表
+            orientation="h
