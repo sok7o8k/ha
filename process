@@ -135,115 +135,26 @@ app.layout = dbc.Container([
     ]),
 ])
 
-import sqlalchemy
-from sqlalchemy import create_engine
-
-def get_server(query, server, database):
-    engine = sqlalchemy.create_engine(f'mssql+pyodbc://{server}/{database}?trusted_connection=yes&driver=ODBC+Driver+17+for+SQL+Server')
-    with engine.connect() as conn:
-        df = pd.read_sql_query(query, conn)
-    engine.dispose()
-    return df
-
 @app.callback(
-    Output("tags", "options"),
-    [Input("tank-picker", "value"), Input("interval", "value")]
+    Output("tags", "options"), 
+    Input("tank-picker", "value")
 )
-def update_tags_options(Tank_ID, interval):
-    # 根據 interval 選擇不同的資料表
-    if interval == "d":
-        tables = ["PI_REPLICATION.dbo.Summary_Daily_AVG_TC_PEM_Melting_1", 
-                  "PI_REPLICATION.dbo.Summary_Daily_AVG_TC_PEM_Melting_2"]
-    elif interval == "h":
-        tables = ["PI_REPLICATION.dbo.Summary_Hour_AVG_TC_PEM_Melting_1", 
-                  "PI_REPLICATION.dbo.Summary_Hour_AVG_TC_PEM_Melting_2"]
-    else:
-        raise ValueError("Unsupported interval for SQL data retrieval")
+def update_tags_options(Tank_ID):
+    tags_df = pd.read_csv("tags.csv")
+    csv_tags = tags_df.loc[tags_df["tank"].str.startswith(Tank_ID), "tag"].tolist()
 
-    # 獲取所有有數據的欄位
-    available_tags = []
-    for table_name in tables:
-        # 獲取欄位名稱
-        query = f"""
-            SELECT COLUMN_NAME
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_NAME = '{table_name.split('.')[-1]}'
-            AND COLUMN_NAME != 'tank_id'
-            AND COLUMN_NAME != 'Data_Time'
-        """
-        
-        columns_df = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
-        columns = columns_df["COLUMN_NAME"].tolist()
+    with PI.PIServer(server="grape") as server:
+        points = server.search(f'*{Tank_ID}*')
+        pi_tags = [p.name for p in points]
 
-        # 遍歷所有欄位，僅檢查最後一筆資料是否為空
-        for column in columns:
-            query = f"""
-                SELECT TOP 1 [{column}]
-                FROM {table_name}
-                WHERE tank_id = '{Tank_ID}'
-                ORDER BY Data_Time DESC
-            """
-            result_df = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
+    combined_tags = csv_tags + pi_tags
 
-            # 如果該欄位的最後一筆資料非空，將其添加到 available_tags 中
-            if not result_df.empty and result_df.iloc[0][column] is not None:
-                available_tags.append(column)
-
-    # 去除重複的欄位，並返回選項
-    unique_tags = list(set(available_tags))
-    return [{'label': tag, 'value': tag} for tag in unique_tags]
+    return combined_tags
 
 
 from plotly.subplots import make_subplots
 
-def column_exists(table_name, column_name):
-    query = f"""
-        SELECT COLUMN_NAME
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_NAME = '{table_name.split('.')[-1]}'
-        AND COLUMN_NAME = '{column_name}'
-    """
-    result_df = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
-    return not result_df.empty
-
-def get_tag_data_from_sql(tag, start_date, end_date, interval, tank):
-    # 根據 interval 選擇不同的資料表
-    if interval == "d":
-        tables = ["PI_REPLICATION.dbo.Summary_Daily_AVG_TC_PEM_Melting_1",
-                  "PI_REPLICATION.dbo.Summary_Daily_AVG_TC_PEM_Melting_2"]
-    elif interval == "h":
-        tables = ["PI_REPLICATION.dbo.Summary_Hour_AVG_TC_PEM_Melting_1",
-                  "PI_REPLICATION.dbo.Summary_Hour_AVG_TC_PEM_Melting_2"]
-    else:
-        raise ValueError("Unsupported interval for SQL data retrieval")
-
-    all_data = []
-    for table_name in tables:
-        # 確認欄位是否存在
-        if not column_exists(table_name, tag):
-            print(f"Column '{tag}' does not exist in table '{table_name}'")
-            continue  # 跳過該表，繼續檢查其他表
-
-        # 根據選擇的 tank 過濾數據
-        query = f"""
-            SELECT Data_Time, [{tag}] AS Value
-            FROM {table_name}
-            WHERE Data_Time BETWEEN '{start_date}' AND '{end_date}'
-            AND tank_id = '{tank}'
-            ORDER BY Data_Time
-        """
-        data = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
-        all_data.append(data)
-
-    if not all_data:
-        raise ValueError(f"No data found for tag '{tag}' in the specified date range.")
-    
-    # 合併所有表格的數據
-    df = pd.concat(all_data)
-    df['Data_Time'] = pd.to_datetime(df['Data_Time'])
-    df.set_index('Data_Time', inplace=True)
-    print(df)
-    return df
+# ...
 
 @app.callback(
     Output("combined-graph", "figure"),
@@ -254,10 +165,11 @@ def get_tag_data_from_sql(tag, start_date, end_date, interval, tank):
     Input("tank-picker", "value"),
 )
 def update_combined_graph(tags, start_date, end_date, interval, tank):
+    # 創建空的圖表
     fig = go.Figure(layout=dict(colorway=px.colors.qualitative.Plotly))
     axis_count = 2
 
-    # 堆疊柱狀圖 - 缺陷數據
+    # 堆疊柱狀圖部分
     start_date = pd.to_datetime(start_date)
     end_date = pd.to_datetime(end_date)
     filtered_df = df_cleaned[
@@ -274,44 +186,92 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
 
     fig.update_layout(barmode='stack')
 
-    # 添加 SQL tags 的趨勢線
+        # 添加PI Tags的趨勢線
     if tags and start_date and end_date and interval:
-        for tag in tags:
-            # 依 tag、日期範圍、interval 和 tank 從 SQL 抓取數據
-            tag_data = get_tag_data_from_sql(tag, start_date, end_date, interval, tank)
-            tag_min = tag_data['Value'].min()
-            tag_max = tag_data['Value'].max()
-            # 為 tag 數據添加趨勢線
-            fig.add_trace(go.Scatter(
-                x=tag_data.index,
-                y=tag_data['Value'],
-                mode='lines',
-                name=tag,
-                line=dict(color=fig['layout']['colorway'][axis_count + 1]),
-                yaxis='y' + str(axis_count)
-            ))
+        servername = "grape"
+        with PI.PIServer(server=servername) as server:
+            points = server.search(tags)
+            if len(points) > 0:
+                series = []
+                for p in points:
+                    # 使用 recorded 方法來獲取原始數據
+                    data = p.recorded_values(
+                        start_time=start_date,
+                        end_time=end_date
+                    )
 
-            # 為每個 tag 配置額外的 y 軸
-            fig.update_layout(
-                **{'yaxis' + str(axis_count): dict(
-                    titlefont=dict(color=fig['layout']['colorway'][axis_count + 1]),
-                    tickfont=dict(color=fig['layout']['colorway'][axis_count + 1]),
-                    overlaying='y',
-                    side="right",
-                    position=1 - (0.04 * (axis_count - 1)),
-                    autorange = True
-                    #range = [tag_min, tag_max]
-                )}
-            )
-            axis_count += 1
+                    # 提取時間和數據
+                    recorded_data = pd.DataFrame(data).reset_index()
+                    recorded_data.columns = ['Timestamp', p.name]
+
+                    # 處理非數字型數據（如 AFEnumerationValue），嘗試將它們轉換成字符串或其他可用數值
+                    def convert_to_numeric(val):
+                        try:
+                            return float(val)
+                        except (ValueError, TypeError):
+                            return None  # 如果無法轉換，返回 None
+
+                    recorded_data[p.name] = recorded_data[p.name].apply(convert_to_numeric)
+
+                    # 設定時間戳
+                    recorded_data['Timestamp'] = pd.to_datetime(recorded_data['Timestamp'])
+                    recorded_data.set_index('Timestamp', inplace=True)
+
+                    # 根據 interval 重新取樣數據
+                    interval_mapping = {
+                        "d": "1D",  # 天
+                        "h": "1H",  # 小時
+                        "m": "1T",  # 分鐘
+                        "s": "1S",  # 秒
+                    }
+
+                    if interval in interval_mapping:
+                        # 使用 pandas 的 resample 來根據選擇的 interval 重新取樣數據
+                        resampled_data = recorded_data.resample(interval_mapping[interval]).mean()
+                    else:
+                        resampled_data = recorded_data  # 如果沒有指定 interval，使用原始數據
+
+                    series.append(resampled_data)
+
+                # 合併所有 PI tags 數據
+                df = pd.concat(series, axis=1)
+
+                # 處理時間格式
+                df['Timestamp'] = df.index
+                df['Timestamp'] = pd.to_datetime(df['Timestamp'])
+
+                print(df)
+
+                axis_count = 2
+                for tag in tags:
+                    if tag in df.columns:
+                        fig.add_trace(go.Scatter(x=df["Timestamp"], 
+                                                y=df[tag], 
+                                                mode='lines', 
+                                                name=tag,
+                                                line=dict(color=fig['layout']['colorway'][axis_count + 1]),  
+                                                yaxis='y' + str(axis_count)))
+
+                        fig.update_layout(
+                            **{'yaxis' + str(axis_count): dict(
+                                titlefont=dict(color=fig['layout']['colorway'][axis_count + 1]),
+                                tickfont=dict(color=fig['layout']['colorway'][axis_count + 1]),
+                                anchor="free",
+                                overlaying= 'y',
+                                side="right",
+                                position=1-(0.04*(axis_count-1))
+                            )}
+                        )
+
+                        axis_count += 1
 
     fig.update_layout(
         title=f'{tank} Performance and Process trend',
-        xaxis=dict(domain=[0, 1 - ((axis_count - 2) * 0.04)], title='Date'),
+        xaxis=dict(domain=[0, 1-((axis_count-2)*0.04)], title='Date'),
         yaxis=dict(tickformat='.1%'),
         yaxis_title='Value',
         height=500,
-        margin=dict(b=0, l=0, r=90, t=90 + 30 * (axis_count / 3)),
+        margin=dict(b=0, l=0, r=90, t=90+30*(axis_count/3)),
         dragmode='zoom',
         legend_title_text=None,
         legend=dict(
