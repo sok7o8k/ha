@@ -109,4 +109,9 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
         dragmode='zoom',
         legend_title_text=None,
         legend=dict(
-            orientation="h
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
+        ),
+    )
+
+    return fig  # 回傳更新後的圖表
+
