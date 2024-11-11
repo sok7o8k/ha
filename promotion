@@ -1,113 +1,22 @@
-def get_tag_data_from_sql(tag, start_date, end_date, interval, tank):
-    # 根據 interval 選擇不同的資料表
-    if interval == "d":
-        tables = ["PI_REPLICATION.dbo.Summary_Daily_AVG_TC_PEM_Melting_1",
-                  "PI_REPLICATION.dbo.Summary_Daily_AVG_TC_PEM_Melting_2"]
-    elif interval == "h":
-        tables = ["PI_REPLICATION.dbo.Summary_Hour_AVG_TC_PEM_Melting_1",
-                  "PI_REPLICATION.dbo.Summary_Hour_AVG_TC_PEM_Melting_2"]
-    else:
-        raise ValueError("Unsupported interval for SQL data retrieval")
+import PIconnect as PI
+from datetime import datetime, timedelta
 
-    all_data = []
-    for table_name in tables:
-        # 確認欄位是否存在
-        if not column_exists(table_name, tag):
-            print(f"Column '{tag}' does not exist in table '{table_name}'")
-            continue  # 跳過該表，繼續檢查其他表
+# 連接到 PI Server
+with PI.PIServer() as server:
+    pi_point = server.tag("YourPITag")  # 替換成您的 PI Tag 名稱
 
-        # 根據選擇的 tank 過濾數據
-        query = f"""
-            SELECT Data_Time, [{tag}] AS Value
-            FROM {table_name}
-            WHERE Data_Time BETWEEN '{start_date}' AND '{end_date}'
-            AND tank_id = '{tank}'
-            ORDER BY Data_Time
-        """
-        data = get_server(query, 'TCF11SQL2011', 'PI_REPLICATION')
-        all_data.append(data)
+    # 設定時間範圍
+    start_time = datetime.now() - timedelta(days=1)  # 1 天前
+    end_time = datetime.now()  # 現在
 
-    if not all_data:
-        raise ValueError(f"No data found for tag '{tag}' in the specified date range.")
-    
-    # 合併所有表格的數據
-    df = pd.concat(all_data)
-    df['Data_Time'] = pd.to_datetime(df['Data_Time'])
-    df.set_index('Data_Time', inplace=True)
-
-    return df
-
-@app.callback(
-    Output("combined-graph", "figure"),
-    Input("tags", "value"),
-    Input("date-picker", "start_date"),
-    Input("date-picker", "end_date"),
-    Input("interval", "value"),
-    Input("tank-picker", "value"),
-)
-def update_combined_graph(tags, start_date, end_date, interval, tank):
-    fig = go.Figure(layout=dict(colorway=px.colors.qualitative.Plotly))
-    axis_count = 2
-
-    # 堆疊柱狀圖 - 缺陷數據
-    start_date = pd.to_datetime(start_date)
-    end_date = pd.to_datetime(end_date)
-    filtered_df = df_cleaned[
-        (pd.to_datetime(df_cleaned["Date"]) >= start_date) &
-        (pd.to_datetime(df_cleaned["Date"]) <= end_date) &
-        (df_cleaned["Tank ID"] == tank)
-    ]
-
-    for defect in filtered_df['Defect ID'].unique():
-        df_defect = filtered_df[filtered_df['Defect ID'] == defect]
-        fig.add_trace(go.Bar(x=df_defect["Date"], 
-                             y=df_defect["M_Defect Loss%"], 
-                             name=defect))
-
-    fig.update_layout(barmode='stack')
-
-    # 添加 SQL tags 的趨勢線
-    if tags and start_date and end_date and interval:
-        for tag in tags:
-            # 依 tag、日期範圍、interval 和 tank 從 SQL 抓取數據
-            tag_data = get_tag_data_from_sql(tag, start_date, end_date, interval, tank)
-
-            if not tag_data.empty:
-                # 為 tag 數據添加趨勢線
-                fig.add_trace(go.Scatter(
-                    x=tag_data.index,
-                    y=tag_data['Value'],
-                    mode='lines',
-                    name=tag,
-                    line=dict(color=fig['layout']['colorway'][axis_count + 1]),
-                    yaxis='y' + str(axis_count)
-                ))
-
-                # 為每個 tag 配置額外的 y 軸
-                fig.update_layout(
-                    **{'yaxis' + str(axis_count): dict(
-                        titlefont=dict(color=fig['layout']['colorway'][axis_count + 1]),
-                        tickfont=dict(color=fig['layout']['colorway'][axis_count + 1]),
-                        anchor="free",
-                        overlaying='y',
-                        side="right",
-                        position=1 - (0.04 * (axis_count - 1))
-                    )}
-                )
-                axis_count += 1
-
-    fig.update_layout(
-        title=f'{tank} Performance and Process trend',
-        xaxis=dict(domain=[0, 1 - ((axis_count - 2) * 0.04)], title='Date'),
-        yaxis=dict(tickformat='.1%'),
-        yaxis_title='Value',
-        height=500,
-        margin=dict(b=0, l=0, r=90, t=90 + 30 * (axis_count / 3)),
-        dragmode='zoom',
-        legend_title_text=None,
-        legend=dict(
-            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
-        ),
+    # 使用 summary 方法計算時間加權平均
+    twa_summary = pi_point.summary(
+        start_time=start_time,
+        end_time=end_time,
+        calculation="average",
+        weighting="time-weighted"  # 指定加權方式
     )
 
-    return fig
+    # 取得時間加權平均值
+    time_weighted_avg = twa_summary.value
+    print("Time-Weighted Average:", time_weighted_avg)
