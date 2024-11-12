@@ -1,271 +1,83 @@
-from sys import path
-import plotly.graph_objects as go
-import plotly.express as px
-from dash import Dash, html, dcc, Input, Output, State, dash_table
+from dash import dcc, html
 import dash_bootstrap_components as dbc
-from dash.exceptions import PreventUpdate
 import pandas as pd
-import base64
 import io
-from dash_auth import BasicAuth
-import PIconnect as PI
-from datetime import datetime, timedelta
+import base64
 
-PI.PIConfig.DEFAULT_TIMEZONE = "Asia/Taipei"
-
-path.append(
-    "C:\\Users\\chenk23\\Desktop\\DT2\\20240507\\03_Databases"
-)  # added to the path BEFORE importing the pyadomd package
-
-from pyadomd import Pyadomd
-import pandas as pd
-
-conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
-query = "   SELECT NON EMPTY { [Measures].[M_Defect Loss%] } ON COLUMNS, NON EMPTY { ([Time].[Time YQMD].[Date].ALLMEMBERS * [Tank].[Tank ID].[Tank ID].ALLMEMBERS * [Defect Tracking].[Defect Tracking Hierarchy].[Defect ID].ALLMEMBERS ) } DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME ON ROWS FROM ( SELECT ( { [Time].[Year].&[2024] } ) ON COLUMNS FROM ( SELECT ( { [Defect Tracking].[Defect Tracking Hierarchy].[Defect Group].&[M_Melt Loss] } ) ON COLUMNS FROM ( SELECT ( { [Production Type].[Production Type Hierarchy].[Production Type].&[1], [Production Type].[Production Type Hierarchy].[Production Type].&[2] } ) ON COLUMNS FROM ( SELECT ( { [Plant].[Plant Hierarchy].[Plant_ID].&[TC] } ) ON COLUMNS FROM ( SELECT ( { [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], [Tank].[Tank ID].&[TC03], [Tank].[Tank ID].&[TC04], [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], [Tank].[Tank ID].&[TC07], [Tank].[Tank ID].&[TC08], [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], [Tank].[Tank ID].&[TC11], [Tank].[Tank ID].&[TC12], [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], [Tank].[Tank ID].&[TC15], [Tank].[Tank ID].&[TC16], [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], [Tank].[Tank ID].&[TC19], [Tank].[Tank ID].&[TC20], [Tank].[Tank ID].&[TC21] } ) ON COLUMNS FROM [PPD_Actual]))))) WHERE ( [Plant].[Plant Hierarchy].[Plant_ID].&[TC], [Production Type].[Production Type Hierarchy].CurrentMember, [Time].[Year].&[2024] ) CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS"
-
-with Pyadomd(conn_str) as conn:
-    with conn.cursor().execute(query) as cur:
-        df = pd.DataFrame(cur.fetchone(), columns=[i.name for i in cur.description])
-
-# Clean this table!
-df_cleaned = df.loc[
-    :, [c for c in df.columns if c[-20:] != "[MEMBER_UNIQUE_NAME]"]
-]  # 去掉"[MEMBER_UNIQUE_NAME]"的columns
-df_cleaned.columns = [
-    c[:-17] if c[-16:] == "[MEMBER_CAPTION]" else c for c in df_cleaned.columns
-]  # 去掉欄位中的"[MEMBER_CAPTION]"
-df_cleaned.columns = [c.split(".")[-1][1:-1] for c in df_cleaned.columns]
-
-import dash
-import dash_core_components as dcc
-import dash_html_components as html
-from dash.dependencies import Input, Output, State
-
-# 创建 Dash 应用
+# 創建 Dash 應用
 app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP])
 
-tanks = df_cleaned["Tank ID"].unique()
-defects = df_cleaned["Defect ID"].unique()
-
 app.layout = dbc.Container([
+    # 其他 layout 元件...
+
+    # 加入匯出按鈕
     dbc.Row([
         dbc.Col([
-            dbc.Card([
-                dbc.CardHeader("選擇日期"),
-                dbc.CardBody([
-                    dcc.DatePickerRange(
-                        id='date-picker',
-                        min_date_allowed=df_cleaned['Date'].min(),
-                        max_date_allowed=(datetime.now() + timedelta(days=1)).date(),
-                        start_date=df_cleaned['Date'].min(),
-                        end_date=(datetime.now() + timedelta(days=1)).date()
-                    ),
-                ])
-            ], className="mb-3"),
-            dbc.Card([
-                dbc.CardHeader("選擇Tank"),
-                dbc.CardBody([
-                    dcc.Dropdown(
-                        id='tank-picker',
-                        options=[{'label': i, 'value': i} for i in tanks],
-                        value=tanks[0]
-                    ),
-                ]),
-            ], className="mb-3"),
-            dbc.Card([
-                dbc.CardHeader("選擇Defect"),
-                dbc.CardBody([
-                    dcc.Dropdown(
-                        id='defect-picker',
-                        options=[{'label': i, 'value': i} for i in defects],
-                        value=defects[0]
-                    ),
-                ]),
-            ], className="mb-3"),
+            dbc.Button("匯出原始數據", id="export-button", color="primary", className="mb-3"),
+            dcc.Download(id="download-dataframe-csv"),  # 用於下載數據的組件
         ], width=4),
-    ]),
-    dbc.Row([
-    dbc.Col([
-        dbc.Card([
-            dbc.CardHeader("選擇Pi Data取值頻率"),
-            dbc.CardBody([
-                dbc.RadioItems(
-                    options=[
-                        {"label": "Day", "value": "d"},
-                        {"label": "Hour", "value": "h"},
-                        {"label": "Minute", "value": "m"}
-                    ],
-                    value="d",
-                    inline=True,
-                    id="interval",
-                    className="mb-3",
-                ),
-            ]),
-        ], className="mb-3"),
-    ], width=6),
-    ]),
-    dbc.Row([
-    dbc.Col([
-        dbc.Card([
-            dbc.CardHeader("選擇PI Tags"),
-            dbc.CardBody([
-                html.Div([
-                    dcc.Dropdown(
-                        options=[],
-                        multi=True,
-                        id="tags",
-                        className="mb-3",
-                    ),
-                ]),
-            ]),
-        ], className="mb-3"),
-    ], width=6)
-    ]),
-        dbc.Row([
-        dbc.Col([
-            dbc.Card([
-                dbc.CardBody([
-                    dcc.Graph(
-                        id="combined-graph",
-                        style={"height": "500px"},
-                    ),
-                ]),
-            ], className="mb-3"),
-        ], width=11),
     ]),
 ])
 
 @app.callback(
-    Output("tags", "options"), 
-    Input("tank-picker", "value")
+    Output("download-dataframe-csv", "data"),
+    Input("export-button", "n_clicks"),
+    State("tags", "value"),
+    State("date-picker", "start_date"),
+    State("date-picker", "end_date"),
+    State("interval", "value"),
+    prevent_initial_call=True
 )
-def update_tags_options(Tank_ID):
-    with PI.PIServer(server="grape") as server:
-        points = server.search(f'*T{Tank_ID}*')
-        pi_tags = [p.name for p in points]
+def export_data(n_clicks, tags, start_date, end_date, interval):
+    # 如果未選擇標籤或日期範圍，則不進行匯出
+    if not tags or not start_date or not end_date:
+        raise PreventUpdate
 
-    return pi_tags
-
-
-from plotly.subplots import make_subplots
-
-
-@app.callback(
-    Output("combined-graph", "figure"),
-    Input("tags", "value"),
-    Input("date-picker", "start_date"),
-    Input("date-picker", "end_date"),
-    Input("interval", "value"),
-    Input("tank-picker", "value"),
-)
-def update_combined_graph(tags, start_date, end_date, interval, tank):
-    # 創建一個空的圖表，設定配色方案
-    fig = go.Figure(layout=dict(colorway=px.colors.qualitative.Plotly))
-    axis_count = 2  # 初始化Y軸數量計數器
-
-    # 將選擇的日期範圍轉換為日期時間格式
+    # 設置PI伺服器並提取選定的數據
     start_date = pd.to_datetime(start_date)
     end_date = pd.to_datetime(end_date)
+    servername = "grape"
     
-    # 過濾 df_cleaned 中符合日期範圍和選擇的 Tank 的數據
-    filtered_df = df_cleaned[
-        (pd.to_datetime(df_cleaned["Date"]) >= start_date) &
-        (pd.to_datetime(df_cleaned["Date"]) <= end_date) &
-        (df_cleaned["Tank ID"] == tank)
-    ]
+    with PI.PIServer(server=servername) as server:
+        points = server.search(tags)
+        series = []
+        for p in points:
+            data = p.interpolated_values(
+                start_time=start_date,
+                end_time=end_date,
+                interval='30m'
+            )
+            interpolated_data = pd.DataFrame(data).reset_index()
+            interpolated_data.columns = ['Timestamp', p.name]
+            interpolated_data['Timestamp'] = pd.to_datetime(interpolated_data['Timestamp'])
+            interpolated_data.set_index('Timestamp', inplace=True)
+            
+            # 根據間隔重新取樣
+            if interval == 'd':
+                resampled_data = interpolated_data.resample('1D').mean()
+            elif interval == 'h':
+                resampled_data = interpolated_data.resample('1H').mean()
+            else:
+                resampled_data = interpolated_data
 
-    # 繪製缺陷數據的堆疊柱狀圖
-    for defect in filtered_df['Defect ID'].unique():
-        df_defect = filtered_df[filtered_df['Defect ID'] == defect]
-        fig.add_trace(go.Bar(x=df_defect["Date"], 
-                             y=df_defect["M_Defect Loss%"], 
-                             name=defect))
+            series.append(resampled_data)
+        
+        # 合併所有選定 PI tags 的數據
+        df_export = pd.concat(series, axis=1)
+    
+    # 將 DataFrame 轉換為 CSV 文件
+    csv_buffer = io.StringIO()
+    df_export.to_csv(csv_buffer)
+    csv_buffer.seek(0)
+    csv_data = csv_buffer.getvalue()
+    b64 = base64.b64encode(csv_data.encode()).decode()
 
-    fig.update_layout(barmode='stack')  # 設定柱狀圖為堆疊模式
-
-    # 如果有選擇 PI tags 且有日期範圍，則提取並繪製 PI 數據
-    if tags and start_date and end_date:
-        servername = "grape"  # 設定 PI 伺服器名稱
-        with PI.PIServer(server=servername) as server:
-            points = server.search(tags)  # 搜尋所選的 PI tags
-            if len(points) > 0:
-                series = []
-                for p in points:
-                    # 使用一分鐘間隔取樣數據
-                    data = p.interpolated_values(
-                        start_time=start_date,
-                        end_time=end_date,
-                        interval='30m'
-                    )
-                    # 將數據轉換為 DataFrame 並重新設置索引
-                    interpolated_data = pd.DataFrame(data).reset_index()
-                    interpolated_data.columns = ['Timestamp', p.name]
-                    
-                    # 將非數字型資料轉換為 None
-                    def convert_to_numeric(val):
-                        try:
-                            return float(val)
-                        except (ValueError, TypeError):
-                            return None  # 如果無法轉換，返回 None
-                    
-                    interpolated_data[p.name] = interpolated_data[p.name].apply(convert_to_numeric)
-                    interpolated_data['Timestamp'] = pd.to_datetime(interpolated_data['Timestamp'])
-                    interpolated_data.set_index('Timestamp', inplace=True)
-
-                    # 根據使用者選擇的 interval 將數據重新取樣
-                    if interval == 'd':  # 若選擇每日資料
-                        resampled_data = interpolated_data.resample('1D').mean()
-                    elif interval == 'h':  # 若選擇每小時資料
-                        resampled_data = interpolated_data.resample('1H').mean()
-                    else:  # 否則使用原始數據（每分鐘）
-                        resampled_data = interpolated_data
-
-                    series.append(resampled_data)  # 將每個 Tag 的數據加入 series 清單
-
-                # 合併所有 PI tags 數據
-                df = pd.concat(series, axis=1)
-
-                # 繪製每個 PI tag 的趨勢線，並添加額外的 Y 軸
-                axis_count = 2
-                for tag in tags:
-                    if tag in df.columns:
-                        fig.add_trace(go.Scatter(x=df.index, 
-                                                y=df[tag], 
-                                                mode='lines', 
-                                                name=tag,
-                                                line=dict(color=fig['layout']['colorway'][axis_count + 1]),  
-                                                yaxis='y' + str(axis_count)))
-
-                        # 設定額外的 Y 軸屬性
-                        fig.update_layout(
-                            **{'yaxis' + str(axis_count): dict(
-                                titlefont=dict(color=fig['layout']['colorway'][axis_count + 1]),
-                                tickfont=dict(color=fig['layout']['colorway'][axis_count + 1]),
-                                anchor="free",
-                                overlaying='y',
-                                side="right",
-                                position=1-(0.04*(axis_count-1))
-                            )}
-                        )
-
-                        axis_count += 1  # 增加 Y 軸數量計數器
-
-    # 更新圖表的佈局和標題
-    fig.update_layout(
-        title=f'{tank} Performance and Process trend',
-        xaxis=dict(domain=[0, 1-((axis_count-2)*0.04)], title='Date'),
-        yaxis=dict(tickformat='.1%'),
-        yaxis_title='Value',
-        height=500,
-        margin=dict(b=0, l=0, r=90, t=90+30*(axis_count/3)),
-        dragmode='zoom',
-        legend_title_text=None,
-        legend=dict(
-            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
-        ),
+    # 生成下載鏈接
+    return dict(
+        content=b64,
+        filename="exported_data.csv",
+        mime_type="text/csv"
     )
-
-    return fig  # 回傳更新後的圖表
 
 if __name__ == '__main__':
     app.run_server(debug=True, port='7788')
