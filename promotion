@@ -1,1 +1,66 @@
-ValueError: 'vidiris' is not a valid value for name; supported values are 'Accent', 'Accent_r', 'Blues', 'Blues_r', 'BrBG', 'BrBG_r', 'BuGn', 'BuGn_r', 'BuPu', 'BuPu_r', 'CMRmap', 'CMRmap_r', 'Dark2', 'Dark2_r', 'GnBu', 'GnBu_r', 'Greens', 'Greens_r', 'Greys', 'Greys_r', 'OrRd', 'OrRd_r', 'Oranges', 'Oranges_r', 'PRGn', 'PRGn_r', 'Paired', 'Paired_r', 'Pastel1', 'Pastel1_r', 'Pastel2', 'Pastel2_r', 'PiYG', 'PiYG_r', 'PuBu', 'PuBuGn', 'PuBuGn_r', 'PuBu_r', 'PuOr', 'PuOr_r', 'PuRd', 'PuRd_r', 'Purples', 'Purples_r', 'RdBu', 'RdBu_r', 'RdGy', 'RdGy_r', 'RdPu', 'RdPu_r', 'RdYlBu', 'RdYlBu_r', 'RdYlGn', 'RdYlGn_r', 'Reds', 'Reds_r', 'Set1', 'Set1_r', 'Set2', 'Set2_r', 'Set3', 'Set3_r', 'Spectral', 'Spectral_r', 'Wistia', 'Wistia_r', 'YlGn', 'YlGnBu', 'YlGnBu_r', 'YlGn_r', 'YlOrBr', 'YlOrBr_r', 'YlOrRd', 'YlOrRd_r', 'afmhot', 'afmhot_r', 'autumn', 'autumn_r', 'binary', 'binary_r', 'bone', 'bone_r', 'brg', 'brg_r', 'bwr', 'bwr_r', 'cividis', 'cividis_r', 'cool', 'cool_r', 'coolwarm', 'coolwarm_r', 'copper', 'copper_r', 'cubehelix', 'cubehelix_r', 'flag', 'flag_r', 'gist_earth', 'gist_earth_r', 'gist_gray', 'gist_gray_r', 'gist_heat', 'gist_heat_r', 'gist_ncar', 'gist_ncar_r', 'gist_rainbow', 'gist_rainbow_r', 'gist_stern', 'gist_stern_r', 'gist_yarg', 'gist_yarg_r', 'gnuplot', 'gnuplot2', 'gnuplot2_r', 'gnuplot_r', 'gray', 'gray_r', 'hot', 'hot_r', 'hsv', 'hsv_r', 'inferno', 'inferno_r', 'jet', 'jet_r', 'magma', 'magma_r', 'nipy_spectral', 'nipy_spectral_r', 'ocean', 'ocean_r', 'pink', 'pink_r', 'plasma', 'plasma_r', 'prism', 'prism_r', 'rainbow', 'rainbow_r', 'seismic', 'seismic_r', 'spring', 'spring_r', 'summer', 'summer_r', 'tab10', 'tab10_r', 'tab20', 'tab20_r', 'tab20b', 'tab20b_r', 'tab20c', 'tab20c_r', 'terrain', 'terrain_r', 'turbo', 'turbo_r', 'twilight', 'twilight_r', 'twilight_shifted', 'twilight_shifted_r', 'viridis', 'viridis_r', 'winter', 'winter_r'
+@app.callback(
+    Output("combined-graph", "figure"),
+    Input("tags", "value"),
+    Input("date-picker", "start_date"),
+    Input("date-picker", "end_date"),
+    Input("interval", "value"),
+    Input("tank-picker", "value"),
+)
+def update_combined_graph(tags, start_date, end_date, interval, tank):
+    # 預定義固定顏色列表
+    color_palette = px.colors.qualitative.Plotly  # 可換成其他配色，如 Viridis, Dark2 等
+    tag_colors = {tag: color_palette[i % len(color_palette)] for i, tag in enumerate(tags)}
+
+    fig = go.Figure()
+
+    # 同樣的數據處理邏輯...
+    if tags and start_date and end_date:
+        servername = "grape"
+        with PI.PIServer(server=servername) as server:
+            points = server.search(tags)
+            series = []
+            for p in points:
+                # 提取數據
+                data = p.interpolated_values(
+                    start_time=pd.to_datetime(start_date),
+                    end_time=pd.to_datetime(end_date),
+                    interval="30m",
+                )
+                interpolated_data = pd.DataFrame(data).reset_index()
+                interpolated_data.columns = ["Timestamp", p.name]
+                interpolated_data["Timestamp"] = pd.to_datetime(interpolated_data["Timestamp"])
+                interpolated_data.set_index("Timestamp", inplace=True)
+
+                # 重新取樣
+                if interval == "d":
+                    resampled_data = interpolated_data.resample("1D").mean()
+                elif interval == "h":
+                    resampled_data = interpolated_data.resample("1H").mean()
+                else:
+                    resampled_data = interpolated_data
+                series.append(resampled_data)
+
+            df = pd.concat(series, axis=1)
+
+            # 根據 tags 繪圖
+            for tag in tags:
+                if tag in df.columns:
+                    fig.add_trace(
+                        go.Scatter(
+                            x=df.index,
+                            y=df[tag],
+                            mode="lines",
+                            name=tag,
+                            line=dict(color=tag_colors[tag]),  # 使用固定顏色
+                        )
+                    )
+
+    # 更新圖表佈局
+    fig.update_layout(
+        title=f"{tank} Performance and Process trend",
+        xaxis=dict(title="Date"),
+        yaxis=dict(title="Value"),
+        height=500,
+        legend=dict(orientation="h", y=1.02, x=1, xanchor="right", yanchor="bottom"),
+    )
+    return fig
