@@ -1,1 +1,2 @@
-TypeError: unsupported operand type(s) for +: 'float' and 'AFEnumerationValue'
+colors = generate_deep_colors(len(tags))
+TypeError: object of type 'NoneType' has no len()
