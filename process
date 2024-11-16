@@ -149,7 +149,10 @@ def update_tags_options(Tank_ID):
 
 
 from plotly.subplots import make_subplots
+import plotly.express as px
 
+# 選擇固定的顏色板，這裡以 Plotly 的顏色板為例
+color_palette = px.colors.qualitative.Plotly
 
 @app.callback(
     Output("combined-graph", "figure"),
@@ -160,8 +163,9 @@ from plotly.subplots import make_subplots
     Input("tank-picker", "value"),
 )
 def update_combined_graph(tags, start_date, end_date, interval, tank):
-    # 創建一個空的圖表，設定配色方案
-    fig = go.Figure(layout=dict(colorway=px.colors.qualitative.Plotly))
+    # 創建一個空的圖表，設定固定顏色板
+    fig = go.Figure()
+    
     axis_count = 2  # 初始化Y軸數量計數器
 
     # 將選擇的日期範圍轉換為日期時間格式
@@ -239,22 +243,22 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
                 # 合併所有 PI tags 數據
                 df = pd.concat(series, axis=1)
 
-                # 繪製每個 PI tag 的趨勢線，並添加額外的 Y 軸
-                axis_count = 2
+                # 設定顏色循環，避免顏色數量限制
+                color_idx = 0
                 for tag in tags:
                     if tag in df.columns:
                         fig.add_trace(go.Scatter(x=df.index, 
                                                 y=df[tag], 
                                                 mode='lines', 
                                                 name=tag,
-                                                line=dict(color=fig['layout']['colorway'][axis_count + 1]),  
+                                                line=dict(color=color_palette[color_idx % len(color_palette)]),  
                                                 yaxis='y' + str(axis_count)))
 
                         # 設定額外的 Y 軸屬性
                         fig.update_layout(
                             **{'yaxis' + str(axis_count): dict(
-                                titlefont=dict(color=fig['layout']['colorway'][axis_count + 1]),
-                                tickfont=dict(color=fig['layout']['colorway'][axis_count + 1]),
+                                titlefont=dict(color=color_palette[color_idx % len(color_palette)]),
+                                tickfont=dict(color=color_palette[color_idx % len(color_palette)]),
                                 anchor="free",
                                 overlaying='y',
                                 side="right",
@@ -263,6 +267,7 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
                         )
 
                         axis_count += 1  # 增加 Y 軸數量計數器
+                        color_idx += 1  # 更新顏色索引
 
     # 更新圖表的佈局和標題
     fig.update_layout(
@@ -283,5 +288,3 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
 
 if __name__ == '__main__':
     app.run_server(debug=True, port='7788')
-
-
