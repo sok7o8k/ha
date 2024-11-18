@@ -5,113 +5,114 @@
     Input("date-picker", "end_date"),
     Input("interval", "value"),
     Input("tank-picker", "value"),
+    State("combined-graph", "figure")  # 保留當前圖表狀態
 )
-def update_combined_graph(tags, start_date, end_date, interval, tank):
-    # 創建圖表
+def update_combined_graph(tags, start_date, end_date, interval, tank, current_figure):
+    # 創建一個空的圖表
     fig = go.Figure()
-    axis_count = 2  # 初始化額外 Y 軸計數器
 
-    # 日期轉換
+    # 初始化 Y 軸計數
+    axis_count = 2
+
+    # 如果有現有的圖表，保留 Y 軸上下限
+    if current_figure:
+        for key in current_figure["layout"]:
+            if key.startswith("yaxis"):
+                fig.update_layout({key: current_figure["layout"][key]})  # 保留所有 Y 軸配置
+
+    # 日期範圍處理
     start_date = pd.to_datetime(start_date)
     end_date = pd.to_datetime(end_date)
-    
-    # 過濾表格數據
+
+    # 繪製缺陷數據的堆疊柱狀圖（保持不變）
     filtered_df = df_cleaned[
         (pd.to_datetime(df_cleaned["Date"]) >= start_date) &
         (pd.to_datetime(df_cleaned["Date"]) <= end_date) &
         (df_cleaned["Tank ID"] == tank)
     ]
 
-    # 添加堆疊柱狀圖
     for defect in filtered_df['Defect ID'].unique():
         df_defect = filtered_df[filtered_df['Defect ID'] == defect]
-        fig.add_trace(go.Bar(x=df_defect["Date"], 
-                             y=df_defect["M_Defect Loss%"], 
-                             name=defect))
+        fig.add_trace(go.Bar(
+            x=df_defect["Date"],
+            y=df_defect["M_Defect Loss%"],
+            name=defect
+        ))
 
-    fig.update_layout(barmode='stack')  # 設定堆疊模式
+    fig.update_layout(barmode='stack')  # 堆疊柱狀圖模式
 
-    # 提取 PI 數據
+    # 如果有選擇 PI Tags
     if tags and start_date and end_date:
         servername = "grape"
         with PI.PIServer(server=servername) as server:
             points = server.search(tags)
             if len(points) > 0:
-                color_idx = 0  # 顏色索引
+                series = []
                 for p in points:
                     # 設定取樣頻率
-                    if interval == 'd':
-                        sampling_interval = '1d'
-                    elif interval == 'h':
-                        sampling_interval = '1h'
-                    elif interval == '5m':
-                        sampling_interval = '5m'
-                    else:  # 預設為 1 分鐘
-                        sampling_interval = '1m'
+                    sampling_interval = '1m' if interval == '1m' else '5m' if interval == '5m' else '1H' if interval == 'h' else '1D'
 
-                    # 獲取插值數據
                     data = p.interpolated_values(
                         start_time=start_date,
                         end_time=end_date,
                         interval=sampling_interval
                     )
+                    
                     interpolated_data = pd.DataFrame(data).reset_index()
                     interpolated_data.columns = ['Timestamp', p.name]
                     interpolated_data['Timestamp'] = pd.to_datetime(interpolated_data['Timestamp'])
                     interpolated_data.set_index('Timestamp', inplace=True)
 
                     # 重新取樣
-                    if interval == 'd':
-                        resampled_data = interpolated_data.resample('1D').mean()
-                    elif interval == 'h':
-                        resampled_data = interpolated_data.resample('1H').mean()
-                    elif interval == '5m':
-                        resampled_data = interpolated_data.resample('5min').mean()
-                    else:
-                        resampled_data = interpolated_data
+                    resampled_data = interpolated_data.resample(sampling_interval).mean()
+                    series.append(resampled_data)
 
-                    # 添加線條到圖表
-                    fig.add_trace(go.Scatter(
-                        x=resampled_data.index, 
-                        y=resampled_data[p.name], 
-                        mode='lines',
-                        name=p.name,
-                        line=dict(color=color_palette[color_idx % len(color_palette)]),
-                        yaxis='y' + str(axis_count)  # 分配新 Y 軸
-                    ))
+                # 合併所有 PI 數據
+                df = pd.concat(series, axis=1)
 
-                    # 動態配置新 Y 軸
-                    fig.update_layout(
-                        **{'yaxis' + str(axis_count): dict(
-                            title=p.name,
-                            titlefont=dict(color=color_palette[color_idx % len(color_palette)]),
-                            tickfont=dict(color=color_palette[color_idx % len(color_palette)]),
-                            anchor="free",
-                            overlaying="y",
-                            side="right",
-                            position=1 - (0.04 * (axis_count - 2))
-                        )}
-                    )
+                color_idx = 0
+                for tag in tags:
+                    if tag in df.columns:
+                        # 如果 Y 軸已存在，使用現有配置
+                        existing_yaxis = f"yaxis{axis_count}"
+                        if existing_yaxis in current_figure["layout"]:
+                            fig.update_layout({existing_yaxis: current_figure["layout"][existing_yaxis]})
+                        else:
+                            # 為新 Tag 創建新的 Y 軸
+                            fig.update_layout(
+                                **{f"yaxis{axis_count}": dict(
+                                    title=tag,
+                                    titlefont=dict(color=color_palette[color_idx % len(color_palette)]),
+                                    tickfont=dict(color=color_palette[color_idx % len(color_palette)]),
+                                    overlaying='y',
+                                    side='right',
+                                    position=1 - (0.04 * (axis_count - 2))
+                                )}
+                            )
+                        # 添加新數據
+                        fig.add_trace(go.Scatter(
+                            x=df.index,
+                            y=df[tag],
+                            mode='lines',
+                            name=tag,
+                            line=dict(color=color_palette[color_idx % len(color_palette)]),
+                            yaxis=f"y{axis_count}"
+                        ))
 
-                    axis_count += 1  # 增加 Y 軸數量
-                    color_idx += 1  # 更新顏色索引
+                        axis_count += 1
+                        color_idx += 1
 
     # 更新圖表佈局
     fig.update_layout(
-        title=f"{tank} Performance and Process Trend",
-        xaxis=dict(domain=[0, 1 - ((axis_count - 2) * 0.04)], title='Date'),
-        yaxis=dict(tickformat=".1%"),
-        yaxis_title="Defect Loss %",
+        title=f'{tank} Performance and Process Trend',
+        xaxis=dict(domain=[0, 1 - (0.04 * (axis_count - 2))], title='Date'),
+        yaxis=dict(title='Defect Loss (%)'),
         height=500,
-        margin=dict(b=0, l=0, r=90, t=90 + 30 * (axis_count / 3)),
-        dragmode="zoom",
+        margin=dict(b=40, l=40, r=80, t=40),
+        dragmode='zoom',
         legend=dict(
-            orientation="h",
-            yanchor="bottom",
-            y=1.02,
-            xanchor="right",
-            x=1,
-        ),
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
+        )
     )
 
     return fig
