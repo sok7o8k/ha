@@ -1,118 +1,32 @@
+import dash
+from dash import dcc, html, Input, Output
+from datetime import date
+
+# 初始化 Dash 應用
+app = dash.Dash(__name__)
+
+app.layout = html.Div([
+    html.H4("選擇日期"),
+    dcc.DatePickerSingle(
+        id='date-picker-single',
+        min_date_allowed=date(2020, 1, 1),  # 最早可選日期
+        max_date_allowed=date(2025, 12, 31),  # 最晚可選日期
+        initial_visible_month=date(2024, 11, 1),  # 預設可見月份
+        date=date(2024, 11, 9),  # 預設選擇的日期
+    ),
+    html.Div(id='output-container-date-picker-single')
+])
+
 @app.callback(
-    Output("combined-graph", "figure"),
-    Input("tags", "value"),
-    Input("date-picker", "start_date"),
-    Input("date-picker", "end_date"),
-    Input("interval", "value"),
-    Input("tank-picker", "value"),
-    State("combined-graph", "figure")  # 保留當前圖表狀態
+    Output('output-container-date-picker-single', 'children'),
+    Input('date-picker-single', 'date')
 )
-def update_combined_graph(tags, start_date, end_date, interval, tank, current_figure):
-    # 創建一個空的圖表
-    fig = go.Figure()
+def update_output(selected_date):
+    if selected_date is not None:
+        date_object = date.fromisoformat(selected_date)
+        return f"您選擇的日期是：{date_object.strftime('%Y-%m-%d')}"
+    return "尚未選擇日期"
 
-    # 初始化 Y 軸計數
-    axis_count = 2
-
-    # 如果有現有的圖表，保留 Y 軸上下限
-    if current_figure:
-        for key in current_figure["layout"]:
-            if key.startswith("yaxis"):
-                fig.update_layout({key: current_figure["layout"][key]})  # 保留所有 Y 軸配置
-
-    # 日期範圍處理
-    start_date = pd.to_datetime(start_date)
-    end_date = pd.to_datetime(end_date)
-
-    # 繪製缺陷數據的堆疊柱狀圖（保持不變）
-    filtered_df = df_cleaned[
-        (pd.to_datetime(df_cleaned["Date"]) >= start_date) &
-        (pd.to_datetime(df_cleaned["Date"]) <= end_date) &
-        (df_cleaned["Tank ID"] == tank)
-    ]
-
-    for defect in filtered_df['Defect ID'].unique():
-        df_defect = filtered_df[filtered_df['Defect ID'] == defect]
-        fig.add_trace(go.Bar(
-            x=df_defect["Date"],
-            y=df_defect["M_Defect Loss%"],
-            name=defect
-        ))
-
-    fig.update_layout(barmode='stack')  # 堆疊柱狀圖模式
-
-    # 如果有選擇 PI Tags
-    if tags and start_date and end_date:
-        servername = "grape"
-        with PI.PIServer(server=servername) as server:
-            points = server.search(tags)
-            if len(points) > 0:
-                series = []
-                for p in points:
-                    # 設定取樣頻率
-                    sampling_interval = '1m' if interval == '1m' else '5m' if interval == '5m' else '1H' if interval == 'h' else '1D'
-
-                    data = p.interpolated_values(
-                        start_time=start_date,
-                        end_time=end_date,
-                        interval=sampling_interval
-                    )
-                    
-                    interpolated_data = pd.DataFrame(data).reset_index()
-                    interpolated_data.columns = ['Timestamp', p.name]
-                    interpolated_data['Timestamp'] = pd.to_datetime(interpolated_data['Timestamp'])
-                    interpolated_data.set_index('Timestamp', inplace=True)
-
-                    # 重新取樣
-                    resampled_data = interpolated_data.resample(sampling_interval).mean()
-                    series.append(resampled_data)
-
-                # 合併所有 PI 數據
-                df = pd.concat(series, axis=1)
-
-                color_idx = 0
-                for tag in tags:
-                    if tag in df.columns:
-                        # 如果 Y 軸已存在，使用現有配置
-                        existing_yaxis = f"yaxis{axis_count}"
-                        if existing_yaxis in current_figure["layout"]:
-                            fig.update_layout({existing_yaxis: current_figure["layout"][existing_yaxis]})
-                        else:
-                            # 為新 Tag 創建新的 Y 軸
-                            fig.update_layout(
-                                **{f"yaxis{axis_count}": dict(
-                                    title=tag,
-                                    titlefont=dict(color=color_palette[color_idx % len(color_palette)]),
-                                    tickfont=dict(color=color_palette[color_idx % len(color_palette)]),
-                                    overlaying='y',
-                                    side='right',
-                                    position=1 - (0.04 * (axis_count - 2))
-                                )}
-                            )
-                        # 添加新數據
-                        fig.add_trace(go.Scatter(
-                            x=df.index,
-                            y=df[tag],
-                            mode='lines',
-                            name=tag,
-                            line=dict(color=color_palette[color_idx % len(color_palette)]),
-                            yaxis=f"y{axis_count}"
-                        ))
-
-                        axis_count += 1
-                        color_idx += 1
-
-    # 更新圖表佈局
-    fig.update_layout(
-        title=f'{tank} Performance and Process Trend',
-        xaxis=dict(domain=[0, 1 - (0.04 * (axis_count - 2))], title='Date'),
-        yaxis=dict(title='Defect Loss (%)'),
-        height=500,
-        margin=dict(b=40, l=40, r=80, t=40),
-        dragmode='zoom',
-        legend=dict(
-            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
-        )
-    )
-
-    return fig
+# 啟動伺服器
+if __name__ == '__main__':
+    app.run_server(debug=True)
