@@ -1,32 +1,36 @@
 import dash
 from dash import dcc, html, Input, Output
+import dash_bootstrap_components as dbc
 from datetime import date
 
 # 初始化 Dash 應用
-app = dash.Dash(__name__)
+app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
 
 app.layout = html.Div([
-    html.H4("選擇日期"),
-    dcc.DatePickerSingle(
-        id='date-picker-single',
-        min_date_allowed=date(2020, 1, 1),  # 最早可選日期
-        max_date_allowed=date(2025, 12, 31),  # 最晚可選日期
-        initial_visible_month=date(2024, 11, 1),  # 預設可見月份
-        date=date(2024, 11, 9),  # 預設選擇的日期
+    html.H4("日期範圍選擇器（包含年份選擇）"),
+    
+    # 使用 DatePickerRange
+    dcc.DatePickerRange(
+        id='date-picker-range',
+        min_date_allowed=date(2020, 1, 1),
+        max_date_allowed=date(2025, 12, 31),
+        start_date=date(2022, 1, 1),
+        end_date=date(2022, 12, 31),
+        display_format='YYYY-MM-DD',  # 顯示格式
+        month_format='MMMM, YYYY'  # 顯示月份格式
     ),
-    html.Div(id='output-container-date-picker-single')
+    
+    # 顯示選擇的日期範圍
+    html.Div(id='output-range')
 ])
 
 @app.callback(
-    Output('output-container-date-picker-single', 'children'),
-    Input('date-picker-single', 'date')
+    Output('output-range', 'children'),
+    Input('date-picker-range', 'start_date'),
+    Input('date-picker-range', 'end_date')
 )
-def update_output(selected_date):
-    if selected_date is not None:
-        date_object = date.fromisoformat(selected_date)
-        return f"您選擇的日期是：{date_object.strftime('%Y-%m-%d')}"
-    return "尚未選擇日期"
+def update_output(start_date, end_date):
+    return f"選擇的日期範圍是：{start_date} 到 {end_date}"
 
-# 啟動伺服器
 if __name__ == '__main__':
     app.run_server(debug=True)
