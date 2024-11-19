@@ -1,40 +1,43 @@
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 
-# 創建一個圖表
-fig = go.Figure()
+# 創建帶有兩個 y 軸的子圖
+fig = make_subplots(
+    rows=2, cols=1,  # 設置為2行1列
+    shared_xaxes=True,  # 所有子圖共用x軸
+    vertical_spacing=0.1,  # 調整子圖之間的間距
+    subplot_titles=("Defect Loss", "Pi Data")  # 子圖標題
+)
 
-# 第一個 y 軸上的數據
-fig.add_trace(go.Scatter(
-    x=[1, 2, 3, 4],
-    y=[10, 11, 12, 13],
-    mode='lines',
-    name='y1',
-    yaxis='y1'  # 使用第一個 y 軸
-))
+# 添加第一個 y 軸的數據
+fig.add_trace(
+    go.Scatter(x=[1, 2, 3, 4], y=[10, 11, 12, 13], mode='lines', name="Defect Loss"),
+    row=1, col=1  # 放在第一行第一列
+)
 
-# 第二個 y 軸上的數據
-fig.add_trace(go.Scatter(
-    x=[1, 2, 3, 4],
-    y=[1, 2, 3, 4],
-    mode='lines',
-    name='y2',
-    yaxis='y2'  # 使用第二個 y 軸
-))
+# 添加第二個 y 軸的數據
+fig.add_trace(
+    go.Scatter(x=[1, 2, 3, 4], y=[1, 2, 3, 4], mode='lines', name="Pi Data", yaxis="y2"),
+    row=2, col=1  # 放在第二行第一列
+)
 
 # 更新佈局
 fig.update_layout(
-    title="圖表 with Multiple Y Axes",
+    title="Trend Analysis with Multiple Y Axes",
+    xaxis=dict(title="X Axis"),
     yaxis=dict(
-        title="Y1 Axis",
-        domain=[0, 0.5]  # 第一個 y 軸佔據圖表上半部
+        title="Defect Loss",
+        range=[0, 15]  # 設定第一個 y 軸的範圍
     ),
     yaxis2=dict(
-        title="Y2 Axis",
-        domain=[0.5, 1],  # 第二個 y 軸佔據圖表下半部
-        overlaying='y',  # 與第一個 y 軸重疊
-        side='right'  # 第二個 y 軸顯示在右邊
+        title="Pi Data",
+        range=[0, 5],  # 設定第二個 y 軸的範圍
+        overlaying="y",  # 讓第二個 y 軸和第一個 y 軸共享空間
+        side="right"  # 第二個 y 軸顯示在右邊
     ),
-    xaxis=dict(title="X Axis"),
+    height=600,
+    showlegend=True,
+    plot_bgcolor="white"
 )
 
 fig.show()
