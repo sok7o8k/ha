@@ -21,7 +21,7 @@ from pyadomd import Pyadomd
 import pandas as pd
 
 conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
-query = "   SELECT NON EMPTY { [Measures].[M_Defect Loss%] } ON COLUMNS, NON EMPTY { ([Time].[Time YQMD].[Date].ALLMEMBERS * [Tank].[Tank ID].[Tank ID].ALLMEMBERS * [Defect Tracking].[Defect Tracking Hierarchy].[Defect ID].ALLMEMBERS ) } DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME ON ROWS FROM ( SELECT ( { [Time].[Year].&[2024] } ) ON COLUMNS FROM ( SELECT ( { [Defect Tracking].[Defect Tracking Hierarchy].[Defect Group].&[M_Melt Loss] } ) ON COLUMNS FROM ( SELECT ( { [Production Type].[Production Type Hierarchy].[Production Type].&[1], [Production Type].[Production Type Hierarchy].[Production Type].&[2] } ) ON COLUMNS FROM ( SELECT ( { [Plant].[Plant Hierarchy].[Plant_ID].&[TC] } ) ON COLUMNS FROM ( SELECT ( { [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], [Tank].[Tank ID].&[TC03], [Tank].[Tank ID].&[TC04], [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], [Tank].[Tank ID].&[TC07], [Tank].[Tank ID].&[TC08], [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], [Tank].[Tank ID].&[TC11], [Tank].[Tank ID].&[TC12], [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], [Tank].[Tank ID].&[TC15], [Tank].[Tank ID].&[TC16], [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], [Tank].[Tank ID].&[TC19], [Tank].[Tank ID].&[TC20], [Tank].[Tank ID].&[TC21] } ) ON COLUMNS FROM [PPD_Actual]))))) WHERE ( [Plant].[Plant Hierarchy].[Plant_ID].&[TC], [Production Type].[Production Type Hierarchy].CurrentMember, [Time].[Year].&[2024] ) CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS"
+query = "  SELECT NON EMPTY { [Measures].[M_Defect Loss%], [Measures].[F_Defect Loss%] } ON COLUMNS, NON EMPTY { ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * [Tank].[Tank ID].[Tank ID].ALLMEMBERS * [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS ) } DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME ON ROWS FROM ( SELECT ( { [Defect Tracking].[Defect SubGroup].&[F_Material Loss]&[Inclusion], [Defect Tracking].[Defect SubGroup].[All] } ) ON COLUMNS FROM ( SELECT ( { [Defect Tracking].[Defect Group].&[M_Melt Loss] } ) ON COLUMNS FROM ( SELECT ( { [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], [Tank].[Tank ID].&[TC03], [Tank].[Tank ID].&[TC04], [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], [Tank].[Tank ID].&[TC07], [Tank].[Tank ID].&[TC08], [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], [Tank].[Tank ID].&[TC11], [Tank].[Tank ID].&[TC12], [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], [Tank].[Tank ID].&[TC15], [Tank].[Tank ID].&[TC16], [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], [Tank].[Tank ID].&[TC19], [Tank].[Tank ID].&[TC20], [Tank].[Tank ID].&[TC21] } ) ON COLUMNS FROM ( SELECT ( { [Time Crate].[CR_Year].&[2024] } ) ON COLUMNS FROM [PPD_Actual])))) WHERE ( [Time Crate].[CR_Year].&[2024], [Defect Tracking].[Defect Group].&[M_Melt Loss], [Defect Tracking].[Defect SubGroup].CurrentMember ) CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS"
 
 with Pyadomd(conn_str) as conn:
     with conn.cursor().execute(query) as cur:
@@ -35,6 +35,8 @@ df_cleaned.columns = [
     c[:-17] if c[-16:] == "[MEMBER_CAPTION]" else c for c in df_cleaned.columns
 ]  # 去掉欄位中的"[MEMBER_CAPTION]"
 df_cleaned.columns = [c.split(".")[-1][1:-1] for c in df_cleaned.columns]
+
+df_cleaned.to_excel('M_loss.xlsx', index=False)
 
 import dash
 import dash_core_components as dcc
@@ -55,9 +57,9 @@ app.layout = dbc.Container([
                 dbc.CardBody([
                     dcc.DatePickerRange(
                         id='date-picker',
-                        min_date_allowed=df_cleaned['Date'].min(),
+                        min_date_allowed=df_cleaned['CR_Date'].min(),
                         max_date_allowed=(datetime.now() + timedelta(days=1)).date(),
-                        start_date=df_cleaned['Date'].min(),
+                        start_date=(datetime.now() - timedelta(days=30)).date(),
                         end_date=(datetime.now() + timedelta(days=1)).date()
                     ),
                 ])
@@ -168,31 +170,21 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
     
     axis_count = 2  # 初始化Y軸數量計數器
 
-    global current_figure
-    if 'current_figure' not in globals():
-        current_figure = None
-        
-    # 如果有現有的圖表，保留 Y 軸上下限
-    if current_figure:
-        for key in current_figure["layout"]:
-            if key.startswith("yaxis"):
-                fig.update_layout({key: current_figure["layout"][key]})  # 保留所有 Y 軸配置
-
     # 將選擇的日期範圍轉換為日期時間格式
     start_date = pd.to_datetime(start_date)
     end_date = pd.to_datetime(end_date)
     
     # 過濾 df_cleaned 中符合日期範圍和選擇的 Tank 的數據
     filtered_df = df_cleaned[
-        (pd.to_datetime(df_cleaned["Date"]) >= start_date) &
-        (pd.to_datetime(df_cleaned["Date"]) <= end_date) &
+        (pd.to_datetime(df_cleaned["CR_Date"]) >= start_date) &
+        (pd.to_datetime(df_cleaned["CR_Date"]) <= end_date) &
         (df_cleaned["Tank ID"] == tank)
     ]
 
     # 繪製缺陷數據的堆疊柱狀圖
     for defect in filtered_df['Defect ID'].unique():
         df_defect = filtered_df[filtered_df['Defect ID'] == defect]
-        fig.add_trace(go.Bar(x=df_defect["Date"], 
+        fig.add_trace(go.Bar(x=df_defect["CR_Date"], 
                              y=df_defect["M_Defect Loss%"], 
                              name=defect))
 
@@ -251,40 +243,62 @@ def update_combined_graph(tags, start_date, end_date, interval, tank):
                     series.append(resampled_data)  # 將每個 Tag 的數據加入 series 清單
 
                 # 合併所有 PI tags 數據
-                df = pd.concat(series, axis=1)
+                pi_data = pd.concat(series, axis=1)
 
                 # 設定顏色循環，避免顏色數量限制
-                color_idx = 0
-                for tag in tags:
-                    if tag in df.columns:
-                        # 如果 Y 軸已存在，使用現有配置
-                        existing_yaxis = f"yaxis{axis_count}"
-                        if existing_yaxis in current_figure["layout"]:
-                            fig.update_layout({existing_yaxis: current_figure["layout"][existing_yaxis]})
-                        else:
-                            # 為新 Tag 創建新的 Y 軸
-                            fig.update_layout(
-                                **{f"yaxis{axis_count}": dict(
-                                    title=tag,
-                                    titlefont=dict(color=color_palette[color_idx % len(color_palette)]),
-                                    tickfont=dict(color=color_palette[color_idx % len(color_palette)]),
-                                    overlaying='y',
-                                    side='right',
-                                    position=1 - (0.04 * (axis_count - 2))
-                                )}
-                            )
-                        # 添加新數據
+ 
+            for idx, tag in enumerate(tags, start=1):
+                if tag in pi_data.columns:
+                    y_min, y_max = pi_data[tag].min(), pi_data[tag].max()
+                    # 確保 colorway 有效
+                    colorway = fig['layout'].get('colorway', None)
+                    if not colorway:  # 如果 colorway 是 None
+                        colorway = px.colors.qualitative.Plotly  # 使用 Plotly 默認配色
+                    if idx <= 6:
+                        # 為前六個 Tag 動態分配 y 軸範圍與位置
                         fig.add_trace(go.Scatter(
-                            x=df.index,
-                            y=df[tag],
+                            x=pi_data.index,
+                            y=pi_data[tag],
                             mode='lines',
                             name=tag,
-                            line=dict(color=color_palette[color_idx % len(color_palette)]),
-                            yaxis=f"y{axis_count}"
+                            yaxis=f'y{idx}',
+                            hovertemplate=f'{tag}<br>%{{x}}<br>%{{y:.2f}}'
                         ))
 
-                        axis_count += 1
-                        color_idx += 1
+                        # 動態添加獨立 y 軸，並按圖表高度均分
+                        fig.update_layout(
+                            **{
+                                f'yaxis{idx}': dict(
+                                    title=tag,
+                                    range=[y_min - (y_max - y_min) * 0.1, y_max + (y_max - y_min) * 0.1],
+                                    domain=[(6 - idx) / 6, (7 - idx) / 6],  # 均分位置
+                                    tickfont=dict(color=fig['layout']['colorway'][idx % len(fig['layout']['colorway'])]),
+                                )
+                            }
+                        )
+                    else:
+                        # 第七個及以後的 Tag，顯示在第六個位置的 domain，但保留自己的 y 軸範圍
+                        fig.add_trace(go.Scatter(
+                            x=pi_data.index,
+                            y=pi_data[tag],
+                            mode='lines',
+                            name=tag,
+                            yaxis=f'y{idx}',
+                            hovertemplate=f'{tag}<br>%{{x}}<br>%{{y:.2f}}'
+                        ))
+
+                        # 動態添加獨立 y 軸，位置與第六條相同
+                        fig.update_layout(
+                            **{
+                                f'yaxis{idx}': dict(
+                                    title=tag,
+                                    range=[y_min - (y_max - y_min) * 0.1, y_max + (y_max - y_min) * 0.1],
+                                    domain=[0, 1/6],  # 固定到最底部
+                                    tickfont=dict(color=fig['layout']['colorway'][idx % len(fig['layout']['colorway'])]),
+                                )
+                            }
+                        )
+
 
     # 更新圖表的佈局和標題
     fig.update_layout(
