@@ -1,2 +1,2 @@
-if existing_yaxis in current_figure["layout"]:
-TypeError: 'NoneType' object is not subscriptable
+tickfont=dict(color=fig['layout']['colorway'][idx % len(fig['layout']['colorway'])]),
+TypeError: object of type 'NoneType' has no len()
