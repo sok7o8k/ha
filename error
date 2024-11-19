@@ -1,1 +1,2 @@
-TypeError: update_combined_graph() takes 4 positional arguments but 5 were given
+raise TypeError(f"Invalid comparison between dtype={left.dtype} and {typ}")
+TypeError: Invalid comparison between dtype=datetime64[ns] and NoneType
