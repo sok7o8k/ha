@@ -1,1 +1,40 @@
-colorway = fig.layout.colorway if hasattr(fig.layout, 'colorway') and fig.layout.colorway is not None else px.colors.qualitative.Plotly
+import plotly.graph_objects as go
+
+# 創建一個圖表
+fig = go.Figure()
+
+# 第一個 y 軸上的數據
+fig.add_trace(go.Scatter(
+    x=[1, 2, 3, 4],
+    y=[10, 11, 12, 13],
+    mode='lines',
+    name='y1',
+    yaxis='y1'  # 使用第一個 y 軸
+))
+
+# 第二個 y 軸上的數據
+fig.add_trace(go.Scatter(
+    x=[1, 2, 3, 4],
+    y=[1, 2, 3, 4],
+    mode='lines',
+    name='y2',
+    yaxis='y2'  # 使用第二個 y 軸
+))
+
+# 更新佈局
+fig.update_layout(
+    title="圖表 with Multiple Y Axes",
+    yaxis=dict(
+        title="Y1 Axis",
+        domain=[0, 0.5]  # 第一個 y 軸佔據圖表上半部
+    ),
+    yaxis2=dict(
+        title="Y2 Axis",
+        domain=[0.5, 1],  # 第二個 y 軸佔據圖表下半部
+        overlaying='y',  # 與第一個 y 軸重疊
+        side='right'  # 第二個 y 軸顯示在右邊
+    ),
+    xaxis=dict(title="X Axis"),
+)
+
+fig.show()
