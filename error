@@ -1,2 +1,1 @@
-tickfont=dict(color=fig['layout']['colorway'][idx % len(fig['layout']['colorway'])]),
-TypeError: object of type 'NoneType' has no len()
+colorway = fig.layout.colorway if hasattr(fig.layout, 'colorway') and fig.layout.colorway is not None else px.colors.qualitative.Plotly
