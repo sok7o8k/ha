@@ -1,36 +1,92 @@
-import dash
-from dash import dcc, html, Input, Output
-import dash_bootstrap_components as dbc
-from datetime import date
-
-# 初始化 Dash 應用
-app = dash.Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP])
-
-app.layout = html.Div([
-    html.H4("日期範圍選擇器（包含年份選擇）"),
-    
-    # 使用 DatePickerRange
-    dcc.DatePickerRange(
-        id='date-picker-range',
-        min_date_allowed=date(2020, 1, 1),
-        max_date_allowed=date(2025, 12, 31),
-        start_date=date(2022, 1, 1),
-        end_date=date(2022, 12, 31),
-        display_format='YYYY-MM-DD',  # 顯示格式
-        month_format='MMMM, YYYY'  # 顯示月份格式
-    ),
-    
-    # 顯示選擇的日期範圍
-    html.Div(id='output-range')
-])
-
 @app.callback(
-    Output('output-range', 'children'),
-    Input('date-picker-range', 'start_date'),
-    Input('date-picker-range', 'end_date')
+    Output("combined-graph", "figure"),
+    Input("tags", "value"),
+    Input("date-picker", "start_date"),
+    Input("date-picker", "end_date"),
+    Input("interval", "value"),
 )
-def update_output(start_date, end_date):
-    return f"選擇的日期範圍是：{start_date} 到 {end_date}"
+def update_combined_graph(tags, start_date, end_date, interval):
+    fig = go.Figure()
 
-if __name__ == '__main__':
-    app.run_server(debug=True)
+    if tags:
+        start_date = pd.to_datetime(start_date)
+        end_date = pd.to_datetime(end_date)
+
+        # 模擬獲取數據（用你自己的 PI 數據源代替）
+        with PI.PIServer(server="grape") as server:
+            points = server.search(tags)
+            series = []
+            for p in points:
+                sampling_interval = {'d': '1D', 'h': '1H', '5m': '5min', '1m': '1min'}.get(interval, '30m')
+                data = p.interpolated_values(
+                    start_time=start_date,
+                    end_time=end_date,
+                    interval=sampling_interval
+                )
+                interpolated_data = pd.DataFrame(data).reset_index()
+                interpolated_data.columns = ['Timestamp', p.name]
+                interpolated_data.set_index('Timestamp', inplace=True)
+                series.append(interpolated_data)
+
+            # 合併所有 PI 數據
+            pi_data = pd.concat(series, axis=1)
+
+            for idx, tag in enumerate(tags, start=1):
+                if tag in pi_data.columns:
+                    y_min, y_max = pi_data[tag].min(), pi_data[tag].max()
+
+                    if idx <= 6:
+                        # 為前六個 Tag 動態分配 y 軸範圍與位置
+                        fig.add_trace(go.Scatter(
+                            x=pi_data.index,
+                            y=pi_data[tag],
+                            mode='lines',
+                            name=tag,
+                            yaxis=f'y{idx}',
+                            hovertemplate=f'{tag}<br>%{{x}}<br>%{{y:.2f}}'
+                        ))
+
+                        # 動態添加獨立 y 軸，並按圖表高度均分
+                        fig.update_layout(
+                            **{
+                                f'yaxis{idx}': dict(
+                                    title=tag,
+                                    range=[y_min - (y_max - y_min) * 0.1, y_max + (y_max - y_min) * 0.1],
+                                    domain=[(6 - idx) / 6, (7 - idx) / 6],  # 均分位置
+                                    tickfont=dict(color=fig['layout']['colorway'][idx % len(fig['layout']['colorway'])]),
+                                )
+                            }
+                        )
+                    else:
+                        # 第七個及以後的 Tag，顯示在第六個位置的 domain，但保留自己的 y 軸範圍
+                        fig.add_trace(go.Scatter(
+                            x=pi_data.index,
+                            y=pi_data[tag],
+                            mode='lines',
+                            name=tag,
+                            yaxis=f'y{idx}',
+                            hovertemplate=f'{tag}<br>%{{x}}<br>%{{y:.2f}}'
+                        ))
+
+                        # 動態添加獨立 y 軸，位置與第六條相同
+                        fig.update_layout(
+                            **{
+                                f'yaxis{idx}': dict(
+                                    title=tag,
+                                    range=[y_min - (y_max - y_min) * 0.1, y_max + (y_max - y_min) * 0.1],
+                                    domain=[0, 1/6],  # 固定到最底部
+                                    tickfont=dict(color=fig['layout']['colorway'][idx % len(fig['layout']['colorway'])]),
+                                )
+                            }
+                        )
+
+    # 更新整體佈局
+    fig.update_layout(
+        title='Combined Graph with Dynamic Y-Axes',
+        xaxis=dict(title='Timestamp'),
+        height=600,  # 控制整個圖表高度
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        margin=dict(l=0, r=50, t=50, b=50),
+    )
+
+    return fig
