@@ -1,4 +1,2 @@
-colorway = fig['layout'].get('colorway', None)
-File "C:\Users\chenk23\AppData\Local\Programs\Python\Python38\lib\site-packages\plotly\basedatatypes.py", line 5870, in __getattr__
-return super(BaseLayoutHierarchyType, self).__getattribute__(prop)
-AttributeError: 'Layout' object has no attribute 'get'
+tickfont=dict(color=fig['layout']['colorway'][idx % len(fig['layout']['colorway'])]),
+TypeError: object of type 'NoneType' has no len()
