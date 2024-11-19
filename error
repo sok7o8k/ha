@@ -1,38 +1,31 @@
-import plotly.graph_objects as go
+from dash import Dash, html, Output, Input
+import dash_mantine_components as dmc
 
-# 創建一個空的圖表
-fig = go.Figure()
+# Initialize the Dash app
+app = Dash(__name__)
 
-# 添加 Defect Loss 的數據，使用第一個 y 軸
-fig.add_trace(
-    go.Scatter(x=[1, 2, 3, 4], y=[10, 11, 12, 13], mode='lines', name="Defect Loss"),
-    secondary_y=False  # 使用左邊的 y 軸
-)
-
-# 添加 Pi Data 的數據，使用第二個 y 軸
-fig.add_trace(
-    go.Scatter(x=[1, 2, 3, 4], y=[1, 2, 3, 4], mode='lines', name="Pi Data"),
-    secondary_y=True  # 使用右邊的 y 軸
-)
-
-# 更新佈局，設定y軸範圍和顯示方式
-fig.update_layout(
-    title="Trend Analysis with Multiple Y Axes",
-    xaxis=dict(title="X Axis"),
-    yaxis=dict(
-        title="Defect Loss",
-        range=[0, 15]  # 設定 Defect Loss 的 y 軸範圍
+app.layout = html.Div([
+    dmc.DateRangePicker(
+        id="date-range-picker",
+        label="Select a date range",
+        placeholder="Pick dates",
+        minDate="2023-01-01",
+        maxDate="2024-12-31",
+        value=["2024-11-01", "2024-11-10"],  # Default selected range
     ),
-    yaxis2=dict(
-        title="Pi Data",
-        range=[0, 5],  # 設定 Pi Data 的 y 軸範圍
-        overlaying="y",  # 讓兩個 y 軸重疊
-        side="right"  # 將 Pi Data 顯示在右邊的 y 軸
-    ),
-    height=600,
-    showlegend=True,
-    plot_bgcolor="white"
-)
+    html.Div(id="output-date-range", style={"marginTop": "20px"})
+])
 
-# 顯示圖表
-fig.show()
+# Callback to update the selected date range
+@app.callback(
+    Output("output-date-range", "children"),
+    Input("date-range-picker", "value")
+)
+def update_date_range(selected_range):
+    if selected_range:
+        start_date, end_date = selected_range
+        return f"Selected range: {start_date} to {end_date}"
+    return "No range selected"
+
+if __name__ == "__main__":
+    app.run_server(debug=True)
