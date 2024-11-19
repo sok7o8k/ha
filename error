@@ -1,43 +1,38 @@
 import plotly.graph_objects as go
-from plotly.subplots import make_subplots
 
-# 創建帶有兩個 y 軸的子圖
-fig = make_subplots(
-    rows=2, cols=1,  # 設置為2行1列
-    shared_xaxes=True,  # 所有子圖共用x軸
-    vertical_spacing=0.1,  # 調整子圖之間的間距
-    subplot_titles=("Defect Loss", "Pi Data")  # 子圖標題
-)
+# 創建一個空的圖表
+fig = go.Figure()
 
-# 添加第一個 y 軸的數據
+# 添加 Defect Loss 的數據，使用第一個 y 軸
 fig.add_trace(
     go.Scatter(x=[1, 2, 3, 4], y=[10, 11, 12, 13], mode='lines', name="Defect Loss"),
-    row=1, col=1  # 放在第一行第一列
+    secondary_y=False  # 使用左邊的 y 軸
 )
 
-# 添加第二個 y 軸的數據
+# 添加 Pi Data 的數據，使用第二個 y 軸
 fig.add_trace(
-    go.Scatter(x=[1, 2, 3, 4], y=[1, 2, 3, 4], mode='lines', name="Pi Data", yaxis="y2"),
-    row=2, col=1  # 放在第二行第一列
+    go.Scatter(x=[1, 2, 3, 4], y=[1, 2, 3, 4], mode='lines', name="Pi Data"),
+    secondary_y=True  # 使用右邊的 y 軸
 )
 
-# 更新佈局
+# 更新佈局，設定y軸範圍和顯示方式
 fig.update_layout(
     title="Trend Analysis with Multiple Y Axes",
     xaxis=dict(title="X Axis"),
     yaxis=dict(
         title="Defect Loss",
-        range=[0, 15]  # 設定第一個 y 軸的範圍
+        range=[0, 15]  # 設定 Defect Loss 的 y 軸範圍
     ),
     yaxis2=dict(
         title="Pi Data",
-        range=[0, 5],  # 設定第二個 y 軸的範圍
-        overlaying="y",  # 讓第二個 y 軸和第一個 y 軸共享空間
-        side="right"  # 第二個 y 軸顯示在右邊
+        range=[0, 5],  # 設定 Pi Data 的 y 軸範圍
+        overlaying="y",  # 讓兩個 y 軸重疊
+        side="right"  # 將 Pi Data 顯示在右邊的 y 軸
     ),
     height=600,
     showlegend=True,
     plot_bgcolor="white"
 )
 
+# 顯示圖表
 fig.show()
