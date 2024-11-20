@@ -1,74 +1,15 @@
-import plotly.graph_objects as go
-import pandas as pd
-
-# 示例數據
-data = {
-    "Timestamp": pd.date_range(start="2024-01-01", periods=50, freq="D"),
-    "Tag1": [i + 10 for i in range(50)],
-    "Tag2": [i * 2 for i in range(50)],
-    "Tag3": [50 - i for i in range(50)],
-}
-
-df = pd.DataFrame(data)
-
-# 配置顏色
-color_palette = ["blue", "green", "red"]
-
-# 創建圖表
-fig = go.Figure()
-
-# 計算均分邏輯
-num_series = len(df.columns) - 1  # 減去時間列
-height_per_series = 1 / num_series  # 每個曲線分配的範圍高度
-
-for idx, col in enumerate(df.columns[1:]):  # 遍歷每個數據列（忽略時間列）
-    min_val = df[col].min()  # 原始最小值
-    max_val = df[col].max()  # 原始最大值
-    
-    # 映射數據到均分的子範圍
-    normalized_data = (
-        (df[col] - min_val) / (max_val - min_val) * height_per_series
-        + (num_series - idx - 1) * height_per_series
-    )
-    
-    # 添加曲線
-    fig.add_trace(
-        go.Scatter(
-            x=df["Timestamp"],
-            y=normalized_data,
-            mode="lines",
-            name=col,
-            line=dict(color=color_palette[idx % len(color_palette)]),
-            yaxis="y" + str(idx + 1),
-        )
-    )
-    
-    # 添加獨立的 Y 軸，顯示原始範圍標籤
-    fig.update_layout(
-        **{
-            f"yaxis{idx + 1}": dict(
-                title=f"{col} (Raw Range: {min_val} - {max_val})",
-                overlaying="y" if idx > 0 else None,  # 堆疊在主軸上
-                side="right",
-                range=[(num_series - idx - 1) * height_per_series, (num_series - idx) * height_per_series],
-                tickvals=[
-                    (num_series - idx - 1) * height_per_series,
-                    (num_series - idx) * height_per_series,
-                ],
-                ticktext=[f"{min_val:.1f}", f"{max_val:.1f}"],
-            )
-        }
-    )
-
-# 更新圖表佈局
-fig.update_layout(
-    title="多趨勢線均分顯示效果",
-    xaxis=dict(title="Date"),
-    yaxis=dict(title="Normalized Range (0 to 1)", side="left"),
-    height=600,
-    margin=dict(t=50, b=50, l=50, r=200),
-    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-)
-
-# 顯示圖表
-fig.show()
+dbc.Card([
+    dbc.CardHeader("選擇 Loss 類型"),
+    dbc.CardBody([
+        dbc.RadioItems(
+            id='loss-type',
+            options=[
+                {'label': 'Melting Loss', 'value': 'melting'},
+                {'label': 'Finishing Loss', 'value': 'finishing'},
+                {'label': 'None', 'value': 'none'}
+            ],
+            value='none',  # 預設值為 None
+            inline=True
+        ),
+    ]),
+], className="mb-3"),
