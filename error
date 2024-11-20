@@ -1,47 +1,34 @@
-@app.callback(
-    Output("combined-graph", "figure"),
-    Input("tags", "value"),
-    Input("date-picker", "value"),  # 直接從日期篩選器獲取值
-    Input("interval", "value"),
-    Input("tank-picker", "value"),
-)
-def update_combined_graph(tags, date_range, interval, tank):
-    # 確保 date_range 是有效值，並解構為 start_date 和 end_date
-    if not date_range or len(date_range) != 2:
-        raise PreventUpdate  # 若未選擇日期範圍，則不更新
+def calculate_ranges(data, num_curves):
+    # 計算每條曲線的原始範圍及視覺範圍
+    visual_ranges = []
+    for i, curve in enumerate(data):
+        y_min, y_max = min(curve), max(curve)  # 原始數據範圍
+        y_vis_min, y_vis_max = i / num_curves, (i + 1) / num_curves  # 視覺範圍
+        scale = (y_vis_max - y_vis_min) / (y_max - y_min)  # 映射比例
+        offset = y_vis_min - y_min * scale  # 偏移量
+        visual_ranges.append((scale, offset, y_min, y_max))
+    return visual_ranges
 
-    start_date, end_date = map(pd.to_datetime, date_range)  # 轉換為 datetime 對象
+def map_data_to_visual(data, ranges):
+    # 將每條曲線數據映射到視覺範圍
+    visual_data = []
+    for curve, (scale, offset, _, _) in zip(data, ranges):
+        visual_curve = [y * scale + offset for y in curve]
+        visual_data.append(visual_curve)
+    return visual_data
 
-    # 過濾 df_cleaned 中符合日期範圍和選擇的 Tank 的數據
-    filtered_df = df_cleaned[
-        (df_cleaned["CR_Date"] >= start_date) &
-        (df_cleaned["CR_Date"] <= end_date) &
-        (df_cleaned["Tank ID"] == tank)
-    ]
+# 測試數據
+data = [
+    [50, 60, 70, 80],  # 曲線 1
+    [10, 20, 30, 40],  # 曲線 2
+    [200, 250, 300, 350]  # 曲線 3
+]
+num_curves = len(data)
 
-    # 剩下的邏輯保持不變
-    fig = go.Figure()
+# 計算範圍與映射
+ranges = calculate_ranges(data, num_curves)
+visual_data = map_data_to_visual(data, ranges)
 
-    # 繪製缺陷數據的堆疊柱狀圖
-    for defect in filtered_df['Defect ID'].unique():
-        df_defect = filtered_df[filtered_df['Defect ID'] == defect]
-        fig.add_trace(go.Bar(x=df_defect["CR_Date"], 
-                             y=df_defect["M_Defect Loss%"], 
-                             name=defect))
-
-    fig.update_layout(barmode='stack')
-
-    # 如果有選擇 PI tags 且有日期範圍，則提取並繪製 PI 數據
-    if tags:
-        # PI 數據處理邏輯（與之前代碼一致）
-        pass  # 省略部分重複代碼
-
-    fig.update_layout(
-        title=f'{tank} Performance and Process trend',
-        xaxis=dict(title='Date'),
-        yaxis=dict(tickformat='.1%'),
-        height=500,
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-    )
-
-    return fig
+# 打印結果
+for i, (curve, (scale, offset, y_min, y_max)) in enumerate(zip(visual_data, ranges)):
+    print(f"曲線 {i+1}: 視覺數據 = {curve}, 原始範圍 = [{y_min}, {y_max}]")
