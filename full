@@ -221,7 +221,7 @@ color_palette = px.colors.qualitative.Plotly
     Input("date-picker", "value"),  # 直接從日期篩選器獲取值
     Input("interval", "value"),
     Input("tank-picker", "value"),
-    Input("loss_type", "value")
+    Input("loss-type", "value")
 )
 def update_combined_graph(tags, date_range, interval, tank, loss_type):
     # 創建一個空的圖表，設定固定顏色板
