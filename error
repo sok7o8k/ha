@@ -17,17 +17,19 @@ color_palette = ["blue", "green", "red"]
 # 創建圖表
 fig = go.Figure()
 
-# 設置每條線的對應 Y 軸範圍
-num_series = len(df.columns) - 1
-y_ranges = [((num_series - i - 1) / num_series, (num_series - i) / num_series) for i in range(num_series)]
+# 計算均分邏輯
+num_series = len(df.columns) - 1  # 減去時間列
+height_per_series = 1 / num_series  # 每個曲線分配的範圍高度
 
-for idx, col in enumerate(df.columns[1:]):
-    min_val = df[col].min()
-    max_val = df[col].max()
-    y_range = y_ranges[idx]
-
-    # 映射數據到均分的範圍
-    normalized_data = (df[col] - min_val) / (max_val - min_val) * (y_range[1] - y_range[0]) + y_range[0]
+for idx, col in enumerate(df.columns[1:]):  # 遍歷每個數據列（忽略時間列）
+    min_val = df[col].min()  # 原始最小值
+    max_val = df[col].max()  # 原始最大值
+    
+    # 映射數據到均分的子範圍
+    normalized_data = (
+        (df[col] - min_val) / (max_val - min_val) * height_per_series
+        + (num_series - idx - 1) * height_per_series
+    )
     
     # 添加曲線
     fig.add_trace(
@@ -41,15 +43,18 @@ for idx, col in enumerate(df.columns[1:]):
         )
     )
     
-    # 添加對應的 Y 軸
+    # 添加獨立的 Y 軸，顯示原始範圍標籤
     fig.update_layout(
         **{
             f"yaxis{idx + 1}": dict(
                 title=f"{col} (Raw Range: {min_val} - {max_val})",
-                overlaying="y" if idx > 0 else None,
+                overlaying="y" if idx > 0 else None,  # 堆疊在主軸上
                 side="right",
-                range=y_range,
-                tickvals=[y_range[0], y_range[1]],
+                range=[(num_series - idx - 1) * height_per_series, (num_series - idx) * height_per_series],
+                tickvals=[
+                    (num_series - idx - 1) * height_per_series,
+                    (num_series - idx) * height_per_series,
+                ],
                 ticktext=[f"{min_val:.1f}", f"{max_val:.1f}"],
             )
         }
