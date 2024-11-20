@@ -1,15 +1,19 @@
-dbc.Card([
-    dbc.CardHeader("選擇 Loss 類型"),
-    dbc.CardBody([
-        dbc.RadioItems(
-            id='loss-type',
-            options=[
-                {'label': 'Melting Loss', 'value': 'melting'},
-                {'label': 'Finishing Loss', 'value': 'finishing'},
-                {'label': 'None', 'value': 'none'}
-            ],
-            value='none',  # 預設值為 None
-            inline=True
-        ),
-    ]),
-], className="mb-3"),
+@app.callback(
+    [Output("defect-picker", "options"),
+     Output("defect-picker", "style")],
+    Input("loss-type", "value")
+)
+def update_defect_dropdown(loss_type):
+    if loss_type == 'melting':
+        # 顯示 Melting Defects
+        options = [{'label': defect, 'value': defect} for defect in df_cleaned["Defect ID"].unique()]
+        style = {'display': 'block'}  # 顯示 Dropdown
+    elif loss_type == 'finishing':
+        # 顯示 Finishing Defects
+        options = [{'label': defect, 'value': defect} for defect in df_finishing_loss_cleaned["Defect ID"].unique()]
+        style = {'display': 'block'}  # 顯示 Dropdown
+    else:
+        # 隱藏 Dropdown
+        options = []
+        style = {'display': 'none'}
+    return options, style
