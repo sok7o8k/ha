@@ -1,1 +1,7 @@
-ValueError: ('Lengths must match to compare', (34,), (1,))
+ValueError: 
+    Invalid value of type 'builtins.list' received for the 'name' property of bar
+        Received value: [['Cord']]
+
+    The 'name' property is a string and must be specified as:
+      - A string
+      - A number that will be converted to a string
