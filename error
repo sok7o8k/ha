@@ -1,1 +1,7 @@
-UnboundLocalError: local variable 'defects' referenced before assignment
+ValueError: 
+    Invalid value of type 'builtins.list' received for the 'name' property of bar
+        Received value: ['Inclusion']
+
+    The 'name' property is a string and must be specified as:
+      - A string
+      - A number that will be converted to a string
