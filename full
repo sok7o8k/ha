@@ -271,7 +271,8 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect):
 
         # 過濾選定的 Defect ID 並繪製堆疊柱狀圖
         if defect:
-            filtered_df = filtered_df[filtered_df["Defect ID"] == defect]
+            defect = [defect]
+            filtered_df = filtered_df[filtered_df["Defect ID"].isin(defect)]
             fig.add_trace(go.Bar(
                 x=filtered_df["CR_Date"],
                 y=filtered_df["M_Defect Loss%"] if loss_type == 'melting' else filtered_df["F_Defect Loss%"],
