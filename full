@@ -1,3 +1,12 @@
+@app.callback(
+    Output("combined-graph", "figure"),
+    Input("tags", "value"),
+    Input("date-picker", "value"),  # 直接從日期篩選器獲取值
+    Input("interval", "value"),
+    Input("tank-picker", "value"),
+    Input("loss-type", "value"),
+    Input("defect-picker", "value"),
+)
 def update_combined_graph(tags, date_range, interval, tank, loss_type, defect):
     # 創建一個空的圖表，設定固定顏色板
     fig = go.Figure()
@@ -44,9 +53,7 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect):
         print(filtered_df)
         # 過濾選定的 Defect ID 並繪製堆疊柱狀圖
         for defect in filtered_df['Defect ID'].unique():
-            if isinstance(defect, str):
-                defect = [defect]
-            filtered_df = filtered_df[filtered_df["Defect ID"].isin(defect)]
+            defect = defect if isinstance(defect, str) else ",".join(defect)
             fig.add_trace(go.Bar(
                 x=filtered_df["CR_Date"],
                 y=filtered_df["M_Defect Loss%"] if loss_type == 'melting' else filtered_df["F_Defect Loss%"],
