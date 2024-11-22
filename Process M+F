@@ -254,15 +254,18 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect):
         print(filtered_df)
         # 過濾選定的 Defect ID 並繪製堆疊柱狀圖
         if defect:
-            for defect in filtered_df['Defect ID'].unique():
-                df_defect = filtered_df[filtered_df['Defect ID'] == defect]
+            final_df = filtered_df[filtered_df['Defect ID'].isin(defect)]
+            for selected_defect in defect:
+                df_defect = final_df[final_df['Defect ID'] == selected_defect]
                 print(df_defect) ##here
                 fig.add_trace(go.Bar(
                     x=df_defect["CR_Date"],
                     y=df_defect["M_Defect Loss%"] if loss_type == 'melting' else df_defect["F_Defect Loss%"],
-                    name=defect
+                    name=selected_defect
                 ))
             fig.update_layout(barmode='stack')
+        else:
+            raise PreventUpdate
 
     # 如果有選擇 PI tags 且有日期範圍，則提取並繪製 PI 數據
     if tags and start_date and end_date:
