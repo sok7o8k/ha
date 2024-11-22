@@ -1,46 +1,30 @@
-app.layout = dbc.Container([
-    dbc.Row([
-        dbc.Col([
-            dbc.Card([
-                dbc.CardHeader("選擇日期"),
-                dbc.CardBody([
-                    dmc.DateRangePicker(
-                        id='date-picker',
-                        minDate=df_cleaned['CR_Date'].min().strftime('%Y-%m-%d'),
-                        maxDate=(datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d'),
-                        value=[
-                            (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
-                            (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
-                        ],
-                        label="日期範圍",
-                        fullWidth=True
-                    ),
-                ])
-            ], className="mb-3"),
-            # 其餘部分保持不變
-        ], width=4),
-    ]),
-    # 其餘部分保持不變
-])
-
-
 @app.callback(
-    Output("combined-graph", "figure"),
-    Input("tags", "value"),
-    Input("date-picker", "value"),  # 接收選擇的日期範圍
-    Input("interval", "value"),
-    Input("tank-picker", "value"),
+    [Output("defect-picker", "options"),  # 更新 defect-picker 的選項
+     Output("defect-picker", "value")],  # 更新 defect-picker 的預設值
+    Input("loss-type", "value"),          # 當 loss-type 改變時觸發
+    Input("tank-picker", "value")        # 當 tank 改變時也觸發（可選，若不同 Tank Defect 不同）
 )
-def update_combined_graph(tags, date_range, interval, tank):
-    # date_range 是列表 [start_date, end_date]
-    start_date = pd.to_datetime(date_range[0])
-    end_date = pd.to_datetime(date_range[1])
+def update_defect_picker(loss_type, tank):
+    # 根據 loss_type 和 tank 篩選相應的 Defect ID
+    if loss_type == 'melting':
+        filtered_df = df_cleaned_M[df_cleaned_M["Tank ID"] == tank]
+    elif loss_type == 'finishing':
+        filtered_df = df_cleaned_F[df_cleaned_F["Tank ID"] == tank]
+    else:
+        return [], []  # 如果沒有選擇有效 loss type，返回空選項
     
-    # 其餘邏輯保持不變
-    filtered_df = df_cleaned[
-        (pd.to_datetime(df_cleaned["CR_Date"]) >= start_date) &
-        (pd.to_datetime(df_cleaned["CR_Date"]) <= end_date) &
-        (df_cleaned["Tank ID"] == tank)
-    ]
+    # 獲取所有 Defect ID 並去重
+    all_defects = filtered_df["Defect ID"].dropna().unique()
+    defect_options = [{"label": defect, "value": defect} for defect in all_defects]
+    
+    # 預設選中所有 Defect
+    default_values = list(all_defects)
 
-    # 其餘邏輯保持不變
+    return defect_options, default_values
+
+dcc.Dropdown(
+    id="defect-picker",
+    multi=True,  # 支持多選
+    options=[],  # 初始為空，通過 callback 動態更新
+    value=[]     # 初始值為空，通過 callback 動態更新
+)
