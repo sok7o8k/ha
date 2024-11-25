@@ -1,21 +1,192 @@
-html.Div([
-    dcc.DatePickerRange(
-        id='date-picker',
-        start_date=datetime.today() - timedelta(days=30),  # 默认30天前
-        end_date=datetime.today(),
-        display_format='YYYY-MM-DD'
-    ),
-    dcc.RadioItems(
-        id='date-shortcuts',
-        options=[
-            {'label': '近一年', 'value': '1Y'},
-            {'label': '近六个月', 'value': '6M'},
-            {'label': '近一个月', 'value': '1M'},
-            {'label': '近七天', 'value': '7D'},
-        ],
-        value='1M',  # 默认快捷日期选项
-        labelStyle={'display': 'inline-block', 'margin-right': '10px'}
-    ),
+from sys import path
+import plotly.graph_objects as go
+import plotly.express as px
+from dash import Dash, html, dcc, Input, Output, State, dash_table
+import dash_bootstrap_components as dbc
+from dash.exceptions import PreventUpdate
+import pandas as pd
+import base64
+import io
+from dash_auth import BasicAuth
+import PIconnect as PI
+from datetime import datetime, timedelta
+
+PI.PIConfig.DEFAULT_TIMEZONE = "Asia/Taipei"
+
+path.append(
+    "C:\\Users\\chenk23\\Desktop\\DT2\\20240507\\03_Databases"
+)  # added to the path BEFORE importing the pyadomd package
+
+from pyadomd import Pyadomd
+import pandas as pd
+
+conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
+query_M = " SELECT NON EMPTY { [Measures].[M_Defect Loss%], [Measures].[F_Defect Loss%] } ON COLUMNS, NON EMPTY { ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * [Tank].[Tank ID].[Tank ID].ALLMEMBERS * [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS ) } DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME ON ROWS FROM ( SELECT ( { [Defect Tracking].[Defect SubGroup].&[F_Material Loss]&[Inclusion], [Defect Tracking].[Defect SubGroup].[All] } ) ON COLUMNS FROM ( SELECT ( { [Defect Tracking].[Defect Group].&[M_Melt Loss] } ) ON COLUMNS FROM ( SELECT ( { [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], [Tank].[Tank ID].&[TC03], [Tank].[Tank ID].&[TC04], [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], [Tank].[Tank ID].&[TC07], [Tank].[Tank ID].&[TC08], [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], [Tank].[Tank ID].&[TC11], [Tank].[Tank ID].&[TC12], [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], [Tank].[Tank ID].&[TC15], [Tank].[Tank ID].&[TC16], [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], [Tank].[Tank ID].&[TC19], [Tank].[Tank ID].&[TC20], [Tank].[Tank ID].&[TC21] } ) ON COLUMNS FROM ( SELECT ( { [Time Crate].[CR_Year].&[2024] } ) ON COLUMNS FROM [PPD_Actual])))) WHERE ( [Time Crate].[CR_Year].&[2024], [Defect Tracking].[Defect Group].&[M_Melt Loss], [Defect Tracking].[Defect SubGroup].CurrentMember ) CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS"
+query_F = " SELECT NON EMPTY { [Measures].[F_Defect Loss%] } ON COLUMNS, NON EMPTY { ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * [Tank].[Tank ID].[Tank ID].ALLMEMBERS * [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS ) } DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME ON ROWS FROM ( SELECT ( { [Defect Tracking].[Defect SubGroup].&[F_Material Loss]&[Inclusion] } ) ON COLUMNS FROM ( SELECT ( { [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], [Tank].[Tank ID].&[TC03], [Tank].[Tank ID].&[TC04], [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], [Tank].[Tank ID].&[TC07], [Tank].[Tank ID].&[TC08], [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], [Tank].[Tank ID].&[TC11], [Tank].[Tank ID].&[TC12], [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], [Tank].[Tank ID].&[TC15], [Tank].[Tank ID].&[TC16], [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], [Tank].[Tank ID].&[TC19], [Tank].[Tank ID].&[TC20], [Tank].[Tank ID].&[TC21] } ) ON COLUMNS FROM ( SELECT ( { [Time Crate].[CR_Year].&[2024] } ) ON COLUMNS FROM [PPD_Actual]))) WHERE ( [Time Crate].[CR_Year].&[2024], [Defect Tracking].[Defect SubGroup].&[F_Material Loss]&[Inclusion] ) CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS"
+
+
+with Pyadomd(conn_str) as conn:
+    with conn.cursor().execute(query_M) as cur:
+        df_M = pd.DataFrame(cur.fetchone(), columns=[i.name for i in cur.description])
+    with conn.cursor().execute(query_F) as cur:
+        df_F = pd.DataFrame(cur.fetchone(), columns=[i.name for i in cur.description])
+
+# Clean this table!
+df_cleaned_M = df_M.loc[
+    :, [c for c in df_M.columns if c[-20:] != "[MEMBER_UNIQUE_NAME]"]
+]  # 去掉"[MEMBER_UNIQUE_NAME]"的columns
+df_cleaned_M.columns = [
+    c[:-17] if c[-16:] == "[MEMBER_CAPTION]" else c for c in df_cleaned_M.columns
+]  # 去掉欄位中的"[MEMBER_CAPTION]"
+df_cleaned_M.columns = [c.split(".")[-1][1:-1] for c in df_cleaned_M.columns]
+    # 確保日期列是 datetime 格式
+df_cleaned_M['CR_Date'] = pd.to_datetime(df_cleaned_M['CR_Date'])
+
+# Clean this table!
+df_cleaned_F = df_F.loc[
+    :, [c for c in df_F.columns if c[-20:] != "[MEMBER_UNIQUE_NAME]"]
+]  # 去掉"[MEMBER_UNIQUE_NAME]"的columns
+df_cleaned_F.columns = [
+    c[:-17] if c[-16:] == "[MEMBER_CAPTION]" else c for c in df_cleaned_F.columns
+]  # 去掉欄位中的"[MEMBER_CAPTION]"
+df_cleaned_F.columns = [c.split(".")[-1][1:-1] for c in df_cleaned_F.columns]
+    # 確保日期列是 datetime 格式
+df_cleaned_F['CR_Date'] = pd.to_datetime(df_cleaned_F['CR_Date'])
+
+df_cleaned_M.to_excel('M_loss.xlsx', index=False) 
+df_cleaned_F.to_excel('F_loss.xlsx', index=False) 
+
+import dash
+import dash_core_components as dcc
+import dash_html_components as html
+from dash.dependencies import Input, Output, State
+import dash_mantine_components as dmc
+
+# 创建 Dash 应用
+app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP])
+
+tanks = df_cleaned_M["Tank ID"].unique()
+defects = df_cleaned_M["Defect ID"].unique()
+print(defects)
+
+app.layout = dbc.Container([
+    dbc.Row([
+        dbc.Col([
+            dbc.Card([
+                dbc.CardHeader("選擇日期"),
+                dbc.CardBody([
+                    dmc.DateRangePicker(
+                        id='date-picker',
+                        minDate=df_cleaned_M['CR_Date'].min().strftime('%Y-%m-%d'),
+                        maxDate=(datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d'),
+                        value=[
+                            (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+                            (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+                        ],
+                        label="日期範圍",
+                        fullWidth=True
+                    ),
+                    dcc.RadioItems(
+                        id='date-shortcuts',
+                        options=[
+                            {'label': '-1 year', 'value': '1Y'},
+                            {'label': '-6 months', 'value': '6M'},
+                            {'label': '-1 month', 'value': '1M'},
+                            {'label': '-7 days', 'value': '7D'},
+                        ],
+                        value='1M',  # 默认快捷日期选项
+                        labelStyle={'display': 'inline-block', 'margin-right': '10px'}
+                    ),
+                ])
+            ], className="mb-3"),
+            dbc.Card([
+                dbc.CardHeader("選擇Tank"),
+                dbc.CardBody([
+                    dcc.Dropdown(
+                        id='tank-picker',
+                        options=[{'label': i, 'value': i} for i in tanks],
+                        value=tanks[0]
+                    ),
+                ]),
+            ], className="mb-3"),
+            dbc.Card([
+                dbc.CardHeader("選擇 Loss 類型"),
+                dbc.CardBody([
+                    dbc.RadioItems(
+                        id='loss-type',
+                        options=[
+                            {'label': 'Melting Loss', 'value': 'melting'},
+                            {'label': 'Finishing Loss', 'value': 'finishing'},
+                            {'label': 'None', 'value': 'none'}
+                        ],
+                        value='melting',  # 預設值為 None
+                        inline=True
+                    ),
+                ]),
+            ], className="mb-3"),
+            dbc.Card([
+                dbc.CardHeader("選擇Defect"),
+                dbc.CardBody([
+                    dcc.Dropdown(
+                        id="defect-picker",
+                        multi=True,  # 支持多選
+                        options=[],  # 初始為空，通過 callback 動態更新
+                        value=[]     # 初始值為空，通過 callback 動態更新
+                    ),
+                ]),
+            ], className="mb-3"),
+        ], width=4),
+    ]),
+    dbc.Row([
+    dbc.Col([
+        dbc.Card([
+            dbc.CardHeader("選擇Pi Data取值頻率"),
+            dbc.CardBody([
+                dbc.RadioItems(
+                    options=[
+                        {"label": "Daily", "value": "d"},
+                        {"label": "Hourly", "value": "h"},
+                        {"label": "5min", "value": "5m"},
+                        {"label": "1min", "value": "1m"}
+                    ],
+                    value="d",
+                    inline=True,
+                    id="interval",
+                    className="mb-3",
+                ),
+            ]),
+        ], className="mb-3"),
+    ], width=6),
+    ]),
+    dbc.Row([
+    dbc.Col([
+        dbc.Card([
+            dbc.CardHeader("選擇PI Tags"),
+            dbc.CardBody([
+                html.Div([
+                    dcc.Dropdown(
+                        options=[],
+                        multi=True,
+                        id="tags",
+                        className="mb-3",
+                    ),
+                ]),
+            ]),
+        ], className="mb-3"),
+    ], width=6)
+    ]),
+        dbc.Row([
+        dbc.Col([
+            dbc.Card([
+                dbc.CardBody([
+                    dcc.Graph(
+                        id="combined-graph",
+                        style={"height": "500px"},
+                    ),
+                ]),
+            ], className="mb-3"),
+        ], width=11),
+    ]),
 ])
 
 @app.callback(
@@ -31,13 +202,13 @@ def update_datepicker(selected_period):
     if selected_period == '1Y':
         start_date = today - timedelta(days=365)
     elif selected_period == '6M':
-        start_date = today - timedelta(days=182)  # 近六个月按182天计算
+        start_date = today - timedelta(days=182)
     elif selected_period == '1M':
         start_date = today - timedelta(days=30)
     elif selected_period == '7D':
         start_date = today - timedelta(days=7)
     else:
         start_date = today - timedelta(days=30)  # 默认近一个月
-    end_date = today
+    end_date = today + timedelta(days=1)
 
     return start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')
