@@ -1,38 +1,43 @@
+html.Div([
+    dcc.DatePickerRange(
+        id='date-picker',
+        start_date=datetime.today() - timedelta(days=30),  # 默认30天前
+        end_date=datetime.today(),
+        display_format='YYYY-MM-DD'
+    ),
+    dcc.RadioItems(
+        id='date-shortcuts',
+        options=[
+            {'label': '近一年', 'value': '1Y'},
+            {'label': '近六个月', 'value': '6M'},
+            {'label': '近一个月', 'value': '1M'},
+            {'label': '近七天', 'value': '7D'},
+        ],
+        value='1M',  # 默认快捷日期选项
+        labelStyle={'display': 'inline-block', 'margin-right': '10px'}
+    ),
+])
+
 @app.callback(
-    [Output("defect-picker", "options"),  # 更新 defect-picker 的選項
-     Output("defect-picker", "value")],  # 更新 defect-picker 的預設值
-    Input("loss-type", "value"),          # 當 loss-type 改變時觸發
-    Input("tank-picker", "value"),        # 當 tank 改變時也觸發
-    Input("date-picker", "value")         # 當日期範圍改變時觸發
+    Output('date-picker', 'start_date'),
+    Output('date-picker', 'end_date'),
+    Input('date-shortcuts', 'value')
 )
-def update_defect_picker(loss_type, tank, date_range):
-    # 確保日期範圍有效
-    if not date_range or len(date_range) != 2:
-        raise PreventUpdate
+def update_datepicker(selected_period):
+    """根据选择的快捷日期更新日期选择器"""
+    from datetime import datetime, timedelta
 
-    start_date, end_date = map(pd.to_datetime, date_range)
-
-    # 根據 loss_type 選擇數據來源並篩選日期和 Tank
-    if loss_type == 'melting':
-        filtered_df = df_cleaned_M[
-            (df_cleaned_M["Tank ID"] == tank) &
-            (df_cleaned_M["CR_Date"] >= start_date) &
-            (df_cleaned_M["CR_Date"] <= end_date)
-        ]
-    elif loss_type == 'finishing':
-        filtered_df = df_cleaned_F[
-            (df_cleaned_F["Tank ID"] == tank) &
-            (df_cleaned_F["CR_Date"] >= start_date) &
-            (df_cleaned_F["CR_Date"] <= end_date)
-        ]
+    today = datetime.today()
+    if selected_period == '1Y':
+        start_date = today - timedelta(days=365)
+    elif selected_period == '6M':
+        start_date = today - timedelta(days=182)  # 近六个月按182天计算
+    elif selected_period == '1M':
+        start_date = today - timedelta(days=30)
+    elif selected_period == '7D':
+        start_date = today - timedelta(days=7)
     else:
-        return [], []  # 無效 loss_type 返回空選項
+        start_date = today - timedelta(days=30)  # 默认近一个月
+    end_date = today
 
-    # 獲取篩選後的所有 Defect ID 並去重
-    all_defects = filtered_df["Defect ID"].dropna().unique()
-    defect_options = [{"label": defect, "value": defect} for defect in all_defects]
-
-    # 預設選中所有篩選出的 Defect
-    default_values = list(all_defects)
-
-    return defect_options, default_values
+    return start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')
