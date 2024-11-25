@@ -280,6 +280,13 @@ import plotly.express as px
 # 選擇固定的顏色板，這裡以 Plotly 的顏色板為例
 color_palette = px.colors.qualitative.Plotly
 
+defect_colors = {
+    'Blister': '#008800',
+    'Crystalline Pt': '#B3B3B3',
+    'Inclusion(Manual)': '#118DFF',
+    
+}
+
 @app.callback(
     Output("combined-graph", "figure"),
     Input("tags", "value"),
@@ -326,7 +333,8 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect):
                 fig.add_trace(go.Bar(
                     x=df_defect["CR_Date"],
                     y=df_defect["M_Defect Loss%"] if loss_type == 'melting' else df_defect["F_Defect Loss%"],
-                    name=selected_defect
+                    name=selected_defect,
+                    marker_color=defect_colors.get(selected_defect)
                 ))
             fig.update_layout(barmode='stack')
         else:
