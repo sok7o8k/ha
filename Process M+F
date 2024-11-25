@@ -86,6 +86,18 @@ app.layout = dbc.Container([
                         label="日期範圍",
                         fullWidth=True
                     ),
+                    dcc.RadioItems(
+                        id='date-shortcuts',
+                        options=[
+                            {'label': '-1 year', 'value': '1Y'},
+                            {'label': '-6 months', 'value': '6M'},
+                            {'label': '-1 month', 'value': '1M'},
+                            {'label': '-7 days', 'value': '7D'},
+                        ],
+                        value='1M',  # 默认快捷日期选项
+                        labelStyle={'display': 'inline-block', 'margin-right': '10px'},
+                        className="mb-3"
+                    ),
                 ])
             ], className="mb-3"),
             dbc.Card([
@@ -109,7 +121,8 @@ app.layout = dbc.Container([
                             {'label': 'None', 'value': 'none'}
                         ],
                         value='melting',  # 預設值為 None
-                        inline=True
+                        inline=True,
+                        className="mb-3"
                     ),
                 ]),
             ], className="mb-3"),
@@ -124,7 +137,7 @@ app.layout = dbc.Container([
                     ),
                 ]),
             ], className="mb-3"),
-        ], width=4),
+        ], width=5),
     ]),
     dbc.Row([
     dbc.Col([
@@ -145,7 +158,7 @@ app.layout = dbc.Container([
                 ),
             ]),
         ], className="mb-3"),
-    ], width=6),
+    ], width=5),
     ]),
     dbc.Row([
     dbc.Col([
@@ -162,7 +175,7 @@ app.layout = dbc.Container([
                 ]),
             ]),
         ], className="mb-3"),
-    ], width=6)
+    ], width=5)
     ]),
         dbc.Row([
         dbc.Col([
@@ -179,8 +192,32 @@ app.layout = dbc.Container([
 ])
 
 @app.callback(
+    Output('date-picker', 'value'),
+    Input('date-shortcuts', 'value')
+)
+def update_datepicker(selected_period):
+    """根据选择的快捷日期更新日期选择器"""
+    from datetime import datetime, timedelta
+
+    today = datetime.today()
+    if selected_period == '1Y':
+        start_date = today - timedelta(days=365)
+    elif selected_period == '6M':
+        start_date = today - timedelta(days=182)
+    elif selected_period == '1M':
+        start_date = today - timedelta(days=30)
+    elif selected_period == '7D':
+        start_date = today - timedelta(days=7)
+    else:
+        start_date = today - timedelta(days=30)  # 默认近一个月
+    end_date = today + timedelta(days=1)
+
+    return [start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')]
+
+@app.callback(
     [Output("defect-picker", "options"),  # 更新 defect-picker 的選項
-     Output("defect-picker", "value")],  # 更新 defect-picker 的預設值
+     Output("defect-picker", "value")  # 更新 defect-picker 的預設值
+     ],  
     Input("loss-type", "value"),          # 當 loss-type 改變時觸發
     Input("tank-picker", "value"),        # 當 tank 改變時也觸發
     Input("date-picker", "value")         # 當日期範圍改變時觸發
@@ -205,6 +242,9 @@ def update_defect_picker(loss_type, tank, date_range):
             (df_cleaned_F["CR_Date"] >= start_date) &
             (df_cleaned_F["CR_Date"] <= end_date)
         ]
+    elif loss_type =='none':
+        return [], []
+    
     else:
         return [], []  # 無效 loss_type 返回空選項
 
@@ -270,6 +310,8 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect):
                 (df_cleaned_F["Tank ID"] == tank)
             ]
         print(filtered_df)
+
+
         # 過濾選定的 Defect ID 並繪製堆疊柱狀圖
         if defect:
             final_df = filtered_df[filtered_df['Defect ID'].isin(defect)]
@@ -368,7 +410,7 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect):
 
     # 更新圖表的佈局和標題
     fig.update_layout(
-        title=f'{tank} Performance and Process trend',
+        title=f'{tank} Performance and Process Chart',
         xaxis=dict(domain=[0, 1-((axis_count-2)*0.04)], title='Date'),
         yaxis=dict(tickformat='.1%'),
         yaxis_title='Value',
