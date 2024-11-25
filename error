@@ -1,10 +1,20 @@
-@app.callback(
-    Output('tank-picker', 'options'),
-    Input('tank-picker', 'value')
+fig.update_layout(
+    title=f'{tank} Performance and Process trend',
+    xaxis=dict(
+        title='Date',
+        domain=[0, 1-(0.04*(axis_count-2))],
+        tickformatstops=[
+            dict(dtickrange=[None, 86400000], value="%Y-%m-%d\n%H:%M:%S"),  # 日期+時間
+            dict(dtickrange=[86400000, None], value="%Y-%m-%d"),  # 僅日期
+        ],
+    ),
+    yaxis=dict(tickformat='.2f'),  # 數值顯示至小數點後兩位
+    yaxis_title='Value',
+    height=500,
+    margin=dict(b=0, l=0, r=90, t=90+30*(axis_count/3)),
+    dragmode='zoom',
+    legend_title_text=None,
+    legend=dict(
+        orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
+    ),
 )
-def update_tank_options(selected_tank):
-    # 提取數字部分並排序
-    sorted_tanks = sorted(df_cleaned["Tank ID"].unique(), key=lambda x: int(x[2:]))
-    
-    # 將排序後的結果傳遞給 Dropdown
-    return [{'label': i, 'value': i} for i in sorted_tanks]
