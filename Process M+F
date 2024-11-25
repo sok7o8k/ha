@@ -192,13 +192,18 @@ app.layout = dbc.Container([
 ])
 
 @app.callback(
+        Output('tank-picker', 'options'),
+        Input('tank-picker', 'value')
+)
+def update_tank_options(sorted_tanks):
+    sorted_tanks = sorted(df_cleaned_M['Tank ID'].unique())
+    return [{'label': i, 'value': i} for i in sorted_tanks ]
+
+@app.callback(
     Output('date-picker', 'value'),
     Input('date-shortcuts', 'value')
 )
 def update_datepicker(selected_period):
-    """根据选择的快捷日期更新日期选择器"""
-    from datetime import datetime, timedelta
-
     today = datetime.today()
     if selected_period == '1Y':
         start_date = today - timedelta(days=365)
@@ -391,7 +396,9 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect):
                                                 mode='lines', 
                                                 name=tag,
                                                 line=dict(color=color_palette[color_idx % len(color_palette)]),  
-                                                yaxis='y' + str(axis_count)))
+                                                yaxis='y' + str(axis_count),
+                                                hovertemplate='Time: %{x}<br>Value: %{y:.2f}'
+                                                ))
 
                         # 設定額外的 Y 軸屬性
                         fig.update_layout(
@@ -410,9 +417,12 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect):
 
     # 更新圖表的佈局和標題
     fig.update_layout(
+        showlegend=True,
         title=f'{tank} Performance and Process Chart',
-        xaxis=dict(domain=[0, 1-((axis_count-2)*0.04)], title='Date'),
-        yaxis=dict(tickformat='.1%'),
+        xaxis=dict(domain=[0, 1-((axis_count-2)*0.04)], 
+                   tickformat='%Y-%m-%d\n%H:%M:%S',
+                   title='Date'),
+        yaxis=dict(tickformat='.2%'),
         yaxis_title='Value',
         height=500,
         margin=dict(b=0, l=0, r=90, t=90+30*(axis_count/3)),
