@@ -1,2 +1,10 @@
-['TC01' 'TC02' 'TC03' 'TC04' 'TC06' 'TC07' 'TC08' 'TC09' 'TC11' 'TC12'
- 'TC14' 'TC16' 'TC17' 'TC18' 'TC19' 'TC20' 'TC21' 'TC05' 'TC10']
+@app.callback(
+    Output('tank-picker', 'options'),
+    Input('tank-picker', 'value')
+)
+def update_tank_options(selected_tank):
+    # 提取數字部分並排序
+    sorted_tanks = sorted(df_cleaned["Tank ID"].unique(), key=lambda x: int(x[2:]))
+    
+    # 將排序後的結果傳遞給 Dropdown
+    return [{'label': i, 'value': i} for i in sorted_tanks]
