@@ -281,10 +281,19 @@ import plotly.express as px
 color_palette = px.colors.qualitative.Plotly
 
 defect_colors = {
+    'Inclusion': '#E53FE1',
+    'Cord': '#FF0000',
+    'PM Melting': '#000000',
     'Blister': '#008800',
     'Crystalline Pt': '#B3B3B3',
-    'Inclusion(Manual)': '#118DFF',
-    
+    'Inclusion (Manual)': '#118DFF',
+    'Inclusion (IIS)': '#85C5FF',
+    'Inclusion (MRS miss)': '#0000CD',
+    'Needle Pt': '#E66C37',
+    'Other Inclusion': '#FFFF00',
+    'Platinum': '#00FFFF',
+    'Surface Blister': '#00FF00',
+    'Zirconia': '#8B0000'
 }
 
 @app.callback(
