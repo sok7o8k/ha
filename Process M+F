@@ -296,7 +296,7 @@ defect_colors = {
     'Inclusion (IIS)': '#85C5FF',
     'Inclusion (MRS miss)': '#0000CD',
     'Needle Pt': '#E66C37',
-    'Other Inclusion': '#FFFF00',
+    'Other Inclusion': '#F0EA00',
     'Platinum': '#00FFFF',
     'Surface Blister': '#00FF00',
     'Zr': '#8B0000'
