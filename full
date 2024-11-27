@@ -1,3 +1,6 @@
+from plotly.subplots import make_subplots
+import plotly.graph_objects as go
+
 @app.callback(
     Output("combined-graph", "figure"),
     Input("tags", "value"),
@@ -8,120 +11,94 @@
     Input("defect-picker", "value"),
 )
 def update_combined_graph(tags, date_range, interval, tank, loss_type, defect):
-    fig = go.Figure()
-    axis_count = 1  # 初始化 Y 轴计数器
-    yaxis_prefix = "y"  # 用于动态创建多轴
+    # 創建子圖
+    fig = make_subplots(
+        rows=2, cols=1,  # 設定兩個子圖
+        shared_xaxes=True,  # 共享X軸
+        vertical_spacing=0.1,  # 子圖之間的空間
+        subplot_titles=("PI Tags Data", "Defects Data"),  # 每個子圖的標題
+        row_heights=[0.6, 0.4]  # 設定每個子圖的高度
+    )
 
-    if not date_range or len(date_range) != 2:
-        raise PreventUpdate
-    start_date, end_date = map(pd.to_datetime, date_range)
+    # 設置 Y 軸
+    axis_count = 2  # 目前有兩個子圖
+    fig.update_layout(
+        yaxis=dict(
+            title='PI Tags Values',
+            tickformat='.2%',
+        ),
+        yaxis2=dict(
+            title='Defect Loss%',
+            tickformat='.2%',
+        ),
+    )
 
-    # 绘制 Defect 数据
-    if loss_type in ['melting', 'finishing', 'melting loss + finishing loss']:
-        if loss_type == 'melting':
-            filtered_df = df_cleaned_M[
-                (df_cleaned_M["CR_Date"] >= start_date) &
-                (df_cleaned_M["CR_Date"] <= end_date) &
-                (df_cleaned_M["Tank ID"] == tank)
-            ]
-        elif loss_type == 'finishing':
-            filtered_df = df_cleaned_F[
-                (df_cleaned_F["CR_Date"] >= start_date) &
-                (df_cleaned_F["CR_Date"] <= end_date) &
-                (df_cleaned_F["Tank ID"] == tank)
-            ]
-        elif loss_type == 'melting loss + finishing loss':
-            filtered_df_melting = df_cleaned_M[
-                (df_cleaned_M["CR_Date"] >= start_date) &
-                (df_cleaned_M["CR_Date"] <= end_date) &
-                (df_cleaned_M["Tank ID"] == tank)
-            ]
-            filtered_df_finishing = df_cleaned_F[
-                (df_cleaned_F["CR_Date"] >= start_date) &
-                (df_cleaned_F["CR_Date"] <= end_date) &
-                (df_cleaned_F["Tank ID"] == tank)
-            ]
-            filtered_df = pd.concat([filtered_df_melting, filtered_df_finishing])
-
-        # 如果 Defect picker 不为空，则绘制缺陷数据
-        if defect:
-            final_df = filtered_df[filtered_df['Defect ID'].isin(defect)]
-            for selected_defect in defect:
-                df_defect = final_df[final_df['Defect ID'] == selected_defect]
-                loss_column = (
-                    "M_Defect Loss%" if selected_defect in df_cleaned_M["Defect ID"].unique()
-                    else "F_Defect Loss%"
-                )
-                fig.add_trace(go.Bar(
-                    x=df_defect["CR_Date"],
-                    y=df_defect[loss_column],
-                    name=selected_defect,
-                    marker_color=defect_colors.get(selected_defect)
-                ))
-            fig.update_layout(barmode='stack')
-
-    # 绘制 PI Tag 数据
-    if tags and start_date and end_date:
+    # 處理 PI Tags 數據
+    if tags and date_range:
+        start_date, end_date = map(pd.to_datetime, date_range)
         servername = "grape"
         with PI.PIServer(server=servername) as server:
-            points = server.search(tags)
+            points = server.search(tags)  # 根據 tags 搜尋 PI 數據
             if len(points) > 0:
                 series = []
+                color_idx = 0
                 for p in points:
-                    sampling_interval = '30m' if interval in ['d', 'h'] else interval
                     data = p.interpolated_values(
                         start_time=start_date,
                         end_time=end_date,
-                        interval=sampling_interval
+                        interval=interval
                     )
                     interpolated_data = pd.DataFrame(data).reset_index()
                     interpolated_data.columns = ['Timestamp', p.name]
-                    interpolated_data['Timestamp'] = pd.to_datetime(interpolated_data['Timestamp'])
                     interpolated_data.set_index('Timestamp', inplace=True)
 
-                    # Resample data
-                    resampled_data = interpolated_data.resample(
-                        '1D' if interval == 'd' else '1H' if interval == 'h' else interval
-                    ).mean()
-                    series.append(resampled_data)
+                    # 將 PI 數據加入子圖1（PI Tags Data）
+                    fig.add_trace(go.Scatter(
+                        x=interpolated_data.index,
+                        y=interpolated_data[p.name],
+                        mode='lines',
+                        name=p.name,
+                        line=dict(color=color_palette[color_idx % len(color_palette)]),
+                        yaxis='y1',  # 使用子圖1的y軸
+                    ), row=1, col=1)
 
-                # 合并所有 Tag 数据
-                df = pd.concat(series, axis=1)
+                    color_idx += 1
 
-                # 遍历每个 Tag，动态生成 Y 轴
-                color_idx = 0
-                for tag in tags:
-                    if tag in df.columns:
-                        y_axis_name = f"{yaxis_prefix}{axis_count}"  # 动态生成 y 轴名称
-                        fig.add_trace(go.Scatter(
-                            x=df.index,
-                            y=df[tag],
-                            mode='lines',
-                            name=tag,
-                            line=dict(color=color_palette[color_idx % len(color_palette)]),
-                            yaxis=y_axis_name,  # 绑定到动态生成的 Y 轴
-                        ))
+    # 處理缺陷數據 (Defects)
+    if defect and date_range:
+        start_date, end_date = map(pd.to_datetime, date_range)
+        final_df = df_cleaned_M[
+            (df_cleaned_M["Tank ID"] == tank) & 
+            (df_cleaned_M["CR_Date"] >= start_date) &
+            (df_cleaned_M["CR_Date"] <= end_date)
+        ]
+        for selected_defect in defect:
+            df_defect = final_df[final_df['Defect ID'] == selected_defect]
+            loss_column = "M_Defect Loss%" if selected_defect in df_cleaned_M["Defect ID"].unique() else "F_Defect Loss%"
+            fig.add_trace(go.Bar(
+                x=df_defect["CR_Date"],
+                y=df_defect[loss_column],
+                name=selected_defect,
+                marker_color=defect_colors.get(selected_defect),
+                yaxis='y2',  # 使用子圖2的y軸
+            ), row=2, col=1)
 
-                        # 更新布局，为每个 Tag 创建独立的 Y 轴
-                        fig.update_layout(**{
-                            y_axis_name: dict(
-                                title=tag,
-                                overlaying="y",  # 叠加在主 Y 轴上
-                                side="right",
-                                position=1 - (0.04 * (axis_count - 1)),
-                                showgrid=False,  # 关闭次轴网格线
-                            )
-                        })
-                        axis_count += 1
-                        color_idx += 1
-
-    # 更新图表整体布局
+    # 更新圖表布局
     fig.update_layout(
-        title=f"{tank} Performance and Process Chart",
-        xaxis=dict(title="Date", tickformat='%Y-%m-%d\n%H:%M:%S'),
-        yaxis=dict(title="Primary Axis", tickformat='.2%'),
-        height=500,
-        margin=dict(l=40, r=120 + (axis_count - 2) * 40, t=40, b=40),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+        showlegend=True,
+        title=f'{tank} Performance and Process Chart',
+        xaxis=dict(
+            domain=[0, 1],
+            tickformat='%Y-%m-%d\n%H:%M:%S',
+            title='Date'
+        ),
+        height=600,
+        margin=dict(b=0, l=0, r=90, t=90),
+        dragmode='zoom',
+        legend_title_text=None,
+        legend=dict(
+            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
+        ),
     )
+
     return fig
