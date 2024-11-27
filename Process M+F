@@ -421,6 +421,8 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect):
 
                 # 合併所有 PI tags 數據
                 df = pd.concat(series, axis=1)
+                print(df)
+                df.to_excel('PI.xlsx', index=False)
 
                 # 設定顏色循環，避免顏色數量限制
                 color_idx = 0
