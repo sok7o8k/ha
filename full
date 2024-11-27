@@ -1,55 +1,4 @@
 @app.callback(
-    [Output("defect-picker", "options"),  # 更新 defect-picker 的選項
-     Output("defect-picker", "value")],  # 更新 defect-picker 的預設值
-    Input("loss-type", "value"),         # 當 loss-type 改變時觸發
-    Input("tank-picker", "value"),       # 當 tank 改變時也觸發
-    Input("date-picker", "value")        # 當日期範圍改變時觸發
-)
-def update_defect_picker(loss_type, tank, date_range):
-    if not date_range or len(date_range) != 2:
-        raise PreventUpdate
-
-    start_date, end_date = map(pd.to_datetime, date_range)
-
-    # 合并 melting 和 finishing 数据源
-    if loss_type == 'melting loss + finishing loss':
-        filtered_df_melting = df_cleaned_M[
-            (df_cleaned_M["Tank ID"] == tank) &
-            (df_cleaned_M["CR_Date"] >= start_date) &
-            (df_cleaned_M["CR_Date"] <= end_date)
-        ]
-        filtered_df_finishing = df_cleaned_F[
-            (df_cleaned_F["Tank ID"] == tank) &
-            (df_cleaned_F["CR_Date"] >= start_date) &
-            (df_cleaned_F["CR_Date"] <= end_date)
-        ]
-        filtered_df = pd.concat([filtered_df_melting, filtered_df_finishing])
-    elif loss_type == 'melting':
-        filtered_df = df_cleaned_M[
-            (df_cleaned_M["Tank ID"] == tank) &
-            (df_cleaned_M["CR_Date"] >= start_date) &
-            (df_cleaned_M["CR_Date"] <= end_date)
-        ]
-    elif loss_type == 'finishing':
-        filtered_df = df_cleaned_F[
-            (df_cleaned_F["Tank ID"] == tank) &
-            (df_cleaned_F["CR_Date"] >= start_date) &
-            (df_cleaned_F["CR_Date"] <= end_date)
-        ]
-    else:
-        return [], []
-
-    # 获取唯一的 Defect ID 选项
-    all_defects = filtered_df["Defect ID"].dropna().unique()
-    defect_options = [{"label": defect, "value": defect} for defect in all_defects]
-
-    # 默认选中所有 Defect
-    default_values = list(all_defects)
-
-    return defect_options, default_values
-
-
-@app.callback(
     Output("combined-graph", "figure"),
     Input("tags", "value"),
     Input("date-picker", "value"),
@@ -60,13 +9,14 @@ def update_defect_picker(loss_type, tank, date_range):
 )
 def update_combined_graph(tags, date_range, interval, tank, loss_type, defect):
     fig = go.Figure()
-    axis_count = 2
+    axis_count = 1  # 初始化 Y 轴计数器
+    yaxis_prefix = "y"  # 用于动态创建多轴
 
     if not date_range or len(date_range) != 2:
         raise PreventUpdate
     start_date, end_date = map(pd.to_datetime, date_range)
 
-    # 处理 Loss 数据
+    # 绘制 Defect 数据
     if loss_type in ['melting', 'finishing', 'melting loss + finishing loss']:
         if loss_type == 'melting':
             filtered_df = df_cleaned_M[
@@ -93,7 +43,7 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect):
             ]
             filtered_df = pd.concat([filtered_df_melting, filtered_df_finishing])
 
-        # 绘制 Defect 数据
+        # 如果 Defect picker 不为空，则绘制缺陷数据
         if defect:
             final_df = filtered_df[filtered_df['Defect ID'].isin(defect)]
             for selected_defect in defect:
@@ -109,8 +59,6 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect):
                     marker_color=defect_colors.get(selected_defect)
                 ))
             fig.update_layout(barmode='stack')
-        else:
-            raise PreventUpdate
 
     # 绘制 PI Tag 数据
     if tags and start_date and end_date:
@@ -137,33 +85,43 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect):
                     ).mean()
                     series.append(resampled_data)
 
+                # 合并所有 Tag 数据
                 df = pd.concat(series, axis=1)
+
+                # 遍历每个 Tag，动态生成 Y 轴
                 color_idx = 0
                 for tag in tags:
                     if tag in df.columns:
+                        y_axis_name = f"{yaxis_prefix}{axis_count}"  # 动态生成 y 轴名称
                         fig.add_trace(go.Scatter(
                             x=df.index,
                             y=df[tag],
                             mode='lines',
                             name=tag,
                             line=dict(color=color_palette[color_idx % len(color_palette)]),
-                            yaxis=f"y{axis_count}",
+                            yaxis=y_axis_name,  # 绑定到动态生成的 Y 轴
                         ))
+
+                        # 更新布局，为每个 Tag 创建独立的 Y 轴
                         fig.update_layout(**{
-                            f"yaxis{axis_count}": dict(
+                            y_axis_name: dict(
                                 title=tag,
-                                overlaying="y",
+                                overlaying="y",  # 叠加在主 Y 轴上
                                 side="right",
-                                position=1 - (0.04 * (axis_count - 1))
+                                position=1 - (0.04 * (axis_count - 1)),
+                                showgrid=False,  # 关闭次轴网格线
                             )
                         })
                         axis_count += 1
                         color_idx += 1
 
+    # 更新图表整体布局
     fig.update_layout(
         title=f"{tank} Performance and Process Chart",
         xaxis=dict(title="Date", tickformat='%Y-%m-%d\n%H:%M:%S'),
-        yaxis=dict(tickformat='.2%'),
+        yaxis=dict(title="Primary Axis", tickformat='.2%'),
         height=500,
+        margin=dict(l=40, r=120 + (axis_count - 2) * 40, t=40, b=40),
+        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
     )
     return fig
