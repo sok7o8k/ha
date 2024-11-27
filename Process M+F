@@ -363,7 +363,9 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect):
                 ))
             fig.update_layout(barmode='stack')
         else:
-            raise PreventUpdate
+            pass
+    else:
+        raise PreventUpdate
 
     # 如果有選擇 PI tags 且有日期範圍，則提取並繪製 PI 數據
     if tags and start_date and end_date:
