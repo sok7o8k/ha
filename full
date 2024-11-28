@@ -3,106 +3,144 @@
     Input("tags", "value"),
     Input("date-picker", "value"),
     Input("interval", "value"),
+    Input("tank-picker", "value"),
+    Input("loss-type", "value"),
+    Input("defect-picker", "value"),
 )
-def update_tags_graph(tags, date_range, interval):
+def update_combined_graph(tags, date_range, interval, tank, loss_type, defect):
     fig = go.Figure()
-    axis_count = 2
 
-    # 確認日期範圍有效
+    # 初始化主 Y 軸，隱藏標籤和標題
+    fig.update_layout(yaxis=dict(showticklabels=False, title=None, zeroline=False))
+
+    axis_count = 2  # 附加 Y 軸的計數器
+    color_palette = px.colors.qualitative.Plotly  # 顏色循環使用 Plotly 的預設色板
+
     if not date_range or len(date_range) != 2:
         raise PreventUpdate
+
     start_date, end_date = map(pd.to_datetime, date_range)
 
-    # 檢查是否選擇了tags
+    # 處理 Loss 數據
+    if loss_type in ['melting', 'finishing', 'melting+finishing']:
+        if loss_type == 'melting':
+            filtered_df = df_cleaned_M[
+                (df_cleaned_M["CR_Date"] >= start_date) &
+                (df_cleaned_M["CR_Date"] <= end_date) &
+                (df_cleaned_M["Tank ID"] == tank)
+            ]
+        elif loss_type == 'finishing':
+            filtered_df = df_cleaned_F[
+                (df_cleaned_F["CR_Date"] >= start_date) &
+                (df_cleaned_F["CR_Date"] <= end_date) &
+                (df_cleaned_F["Tank ID"] == tank)
+            ]
+        elif loss_type == 'melting+finishing':
+            filtered_df_melting = df_cleaned_M[
+                (df_cleaned_M["CR_Date"] >= start_date) &
+                (df_cleaned_M["CR_Date"] <= end_date) &
+                (df_cleaned_M["Tank ID"] == tank)
+            ]
+            filtered_df_finishing = df_cleaned_F[
+                (df_cleaned_F["CR_Date"] >= start_date) &
+                (df_cleaned_F["CR_Date"] <= end_date) &
+                (df_cleaned_F["Tank ID"] == tank)
+            ]
+            filtered_df = pd.concat([filtered_df_melting, filtered_df_finishing])
+
+        # 繪製 Defect 數據
+        if defect:
+            final_df = filtered_df[filtered_df['Defect ID'].isin(defect)]
+            for selected_defect in defect:
+                df_defect = final_df[final_df['Defect ID'] == selected_defect]
+                loss_column = (
+                    "M_Defect Loss%" if selected_defect in df_cleaned_M["Defect ID"].unique()
+                    else "F_Defect Loss%"
+                )
+                fig.add_trace(go.Bar(
+                    x=df_defect["CR_Date"],
+                    y=df_defect[loss_column],
+                    name=selected_defect,
+                    marker_color=defect_colors.get(selected_defect)
+                ))
+            fig.update_layout(barmode='stack')
+
+    # 繪製 PI tags 數據
     if tags:
-        servername = "grape"  # 設定 PI 伺服器名稱
+        servername = "grape"
         with PI.PIServer(server=servername) as server:
             points = server.search(tags)  # 搜尋所選的 PI tags
             if len(points) > 0:
                 series = []
                 for p in points:
-                    # 設定取樣間隔
-                    if interval == 'd':
-                        sampling_interval = '1D'
-                    elif interval == 'h':
-                        sampling_interval = '1H'
-                    elif interval == '5m':
-                        sampling_interval = '5min'
-                    else:  # 默認為 1 分鐘
-                        sampling_interval = '1min'
-
-                    # 提取插值數據
+                    sampling_interval = {'d': '1d', 'h': '1h', '5m': '5m', '1m': '1m'}.get(interval, '1m')
                     data = p.interpolated_values(
                         start_time=start_date,
                         end_time=end_date,
                         interval=sampling_interval
                     )
-
-                    # 轉換為 DataFrame
+                    
+                    # 將數據轉換為 DataFrame
                     interpolated_data = pd.DataFrame(data).reset_index()
                     interpolated_data.columns = ['Timestamp', p.name]
-                    
-                    # 將非數字型數據設為 None
-                    interpolated_data[p.name] = pd.to_numeric(interpolated_data[p.name], errors='coerce')
                     interpolated_data['Timestamp'] = pd.to_datetime(interpolated_data['Timestamp'])
                     interpolated_data.set_index('Timestamp', inplace=True)
 
-                    # 重新取樣數據
-                    if interval in ['d', 'h', '5m']:
-                        resampled_data = interpolated_data.resample(sampling_interval).mean()
-                    else:
-                        resampled_data = interpolated_data
+                    # 確保數據數值有效
+                    interpolated_data[p.name] = pd.to_numeric(interpolated_data[p.name], errors='coerce')
 
-                    series.append(resampled_data)
+                    series.append(interpolated_data)
 
-                # 合併所有 PI tags 數據
+                # 合併所有數據
                 df = pd.concat(series, axis=1)
 
-                # 添加每個 Tag 到圖表
                 color_idx = 0
                 for tag in tags:
                     if tag in df.columns:
+                        # 每個 Tag 使用一個額外的 Y 軸
+                        yaxis_name = f"y{axis_count}"
                         fig.add_trace(go.Scatter(
                             x=df.index,
                             y=df[tag],
                             mode='lines',
                             name=tag,
                             line=dict(color=color_palette[color_idx % len(color_palette)]),
-                            yaxis=f'y{axis_count}' if axis_count > 1 else 'y',
+                            yaxis=yaxis_name,
                             hovertemplate='Time: %{x}<br>Value: %{y:.2f}'
                         ))
 
-                        # 設定額外的 Y 軸屬性
-                        if axis_count > 1:
-                            fig.update_layout(
-                                **{f'yaxis{axis_count}': dict(
+                        # 添加 Y 軸佈局設置
+                        fig.update_layout(
+                            **{
+                                yaxis_name: dict(
+                                    title=f"{tag}",
                                     titlefont=dict(color=color_palette[color_idx % len(color_palette)]),
                                     tickfont=dict(color=color_palette[color_idx % len(color_palette)]),
-                                    anchor="free",
-                                    overlaying='y',
+                                    overlaying="y",
                                     side="right",
-                                    position=1 - (0.04 * (axis_count - 1))
-                                )}
-                            )
-
+                                    anchor="free",
+                                    position=1 - 0.04 * (axis_count - 2)  # 每個附加 Y 軸向左偏移
+                                )
+                            }
+                        )
                         axis_count += 1
                         color_idx += 1
 
-    # 更新圖表布局
+    # 更新圖表佈局
     fig.update_layout(
-        title="PI Tags Data",
-        xaxis=dict(title="Date", tickformat='%Y-%m-%d\n%H:%M:%S'),
-        yaxis=dict(title="Values", tickformat='.2f'),
+        title=f'{tank} Performance and Process Chart',
+        xaxis=dict(domain=[0, 1-((axis_count-2)*0.04)], title='Date'),
+        yaxis_title="Loss (%)",
         height=500,
+        margin=dict(b=40, l=40, r=90, t=60),
+        dragmode='zoom',
         legend=dict(
             orientation="h",
             yanchor="bottom",
             y=1.02,
             xanchor="right",
             x=1
-        ),
-        margin=dict(b=0, l=0, r=90, t=60),
-        dragmode='zoom',
+        )
     )
 
     return fig
