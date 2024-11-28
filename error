@@ -33,20 +33,23 @@ fig.update_layout(
     title='Stacked Bar Chart with Multiple Scatter Plots',
     xaxis_title='Categories',
     yaxis_title='Values',
-    yaxis=dict(title='Primary Y Axis'),
+    yaxis=dict(title='Primary Y Axis'),  # 主 Y 軸
     yaxis2=dict(
         title='Secondary Y Axis',
         overlaying='y',
         side='right',
-        showgrid=False  # 隱藏輔助 Y 軸的網格線
+        showgrid=False,  # 隱藏輔助 Y 軸的網格線
+        range=[0, 15]  # 設定 y2 的範圍
     ),
     yaxis3=dict(
-        title='Tertiary Y Axis',  # 修改標題以區分
+        title='Tertiary Y Axis',
         overlaying='y',
         side='right',
         position=0.95,  # 微調位置
-        showgrid=False  # 隱藏輔助 Y 軸的網格線
+        showgrid=False,  # 隱藏輔助 Y 軸的網格線
+        range=[0, 10]  # 設定 y3 的範圍
     )
 )
 
+# 顯示圖形
 fig.show()
