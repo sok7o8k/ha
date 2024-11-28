@@ -1,55 +1,52 @@
 import plotly.graph_objects as go
+import numpy as np
 
-# 假設有一些數據
-x_values = ['A', 'B', 'C']
+# 模擬數據
+x = np.linspace(1, 10, 100)  # X 軸數據
+y1 = np.sin(x)                # 第一組 Y 軸數據
+y2 = np.cos(x) * 50           # 第二組 Y 軸數據（放大）
+y3 = np.tan(x) * 10           # 第三組 Y 軸數據（放大）
 
-y_values_scatter1 = [8, 12, 5]
-y_values_scatter2 = [2, 5, 9]
-
+# 創建一個空圖表
 fig = go.Figure()
 
-# 添加第一個 Scatter 圖（使用輔助 Y 軸）
+# 添加第一組數據
 fig.add_trace(go.Scatter(
-    x=x_values,
-    y=y_values_scatter1,
-    mode='lines+markers',
-    name='Scatter Series 1',
-    line=dict(color='red'),
-    yaxis='y2'  # 使用輔助 Y 軸
+    x=x,
+    y=y1,
+    mode='lines',
+    name='Sine Wave',
+    yaxis='y1'  # 第一個 Y 軸
 ))
 
-# 添加第二個 Scatter 圖（使用輔助 Y 軸）
+# 添加第二組數據
 fig.add_trace(go.Scatter(
-    x=x_values,
-    y=y_values_scatter2,
-    mode='lines+markers',
-    name='Scatter Series 2',
-    line=dict(color='blue'),
-    yaxis='y3'  # 使用輔助 Y 軸
+    x=x,
+    y=y2,
+    mode='lines',
+    name='Cosine Wave (Scaled)',
+    yaxis='y2'  # 第二個 Y 軸
 ))
 
-# 更新布局
+# 添加第三組數據
+fig.add_trace(go.Scatter(
+    x=x,
+    y=y3,
+    mode='lines',
+    name='Tangent Wave (Scaled)',
+    yaxis='y3'  # 第三個 Y 軸
+))
+
+# 更新圖表佈局
 fig.update_layout(
-    title='Stacked Bar Chart with Multiple Scatter Plots',
-    xaxis_title='Categories',
-    yaxis_title='Values',
-    yaxis=dict(title='Primary Y Axis'),  # 主 Y 軸
-    yaxis2=dict(
-        title='Secondary Y Axis',
-        overlaying='y',
-        side='right',
-        showgrid=False,  # 隱藏輔助 Y 軸的網格線
-        range=[0, 15]  # 設定 y2 的範圍
-    ),
-    yaxis3=dict(
-        title='Tertiary Y Axis',
-        overlaying='y',
-        side='right',
-        position=0.95,  # 微調位置
-        showgrid=False,  # 隱藏輔助 Y 軸的網格線
-        range=[0, 10]  # 設定 y3 的範圍
-    )
+    title='Multiple Y Axes Example',
+    xaxis=dict(title='X Axis'),  # X 軸標題
+    yaxis=dict(title='Y1 Axis', side='right', titlefont=dict(color='blue')),
+    yaxis2=dict(title='Y2 Axis', overlaying='y', side='right', position=0.85, titlefont=dict(color='orange')),
+    yaxis3=dict(title='Y3 Axis', overlaying='y', side='right', position=0.75, titlefont=dict(color='green')),
+    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
+    margin=dict(b=0, l=0, r=100, t=50)  # 調整邊距
 )
 
-# 顯示圖形
+# 顯示圖表
 fig.show()
