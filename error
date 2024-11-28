@@ -1,20 +1,62 @@
+import plotly.graph_objects as go
+
+# 假設有一些數據
+x_values = ['A', 'B', 'C']
+y_values1 = [10, 15, 7]
+y_values2 = [5, 10, 12]
+y_values_scatter1 = [8, 12, 5]
+y_values_scatter2 = [2, 5, 9]
+
+fig = go.Figure()
+
+# 添加堆疊的 Bar 圖
+fig.add_trace(go.Bar(
+    x=x_values,
+    y=y_values1,
+    name='Series 1',
+))
+
+fig.add_trace(go.Bar(
+    x=x_values,
+    y=y_values2,
+    name='Series 2',
+))
+
+# 設置堆疊模式
+fig.update_layout(barmode='stack')
+
+# 添加第一個 Scatter 圖（使用主 Y 軸）
+fig.add_trace(go.Scatter(
+    x=x_values,
+    y=y_values_scatter1,
+    mode='lines+markers',
+    name='Scatter Series 1',
+    line=dict(color='red'),
+    yaxis='y'  # 使用主 Y 軸
+))
+
+# 添加第二個 Scatter 圖（使用輔助 Y 軸）
+fig.add_trace(go.Scatter(
+    x=x_values,
+    y=y_values_scatter2,
+    mode='lines+markers',
+    name='Scatter Series 2',
+    line=dict(color='blue'),
+    yaxis='y2'  # 使用輔助 Y 軸
+))
+
+# 更新布局
 fig.update_layout(
-    title=f'{tank} Performance and Process trend',
-    xaxis=dict(
-        title='Date',
-        domain=[0, 1-(0.04*(axis_count-2))],
-        tickformatstops=[
-            dict(dtickrange=[None, 86400000], value="%Y-%m-%d\n%H:%M:%S"),  # 日期+時間
-            dict(dtickrange=[86400000, None], value="%Y-%m-%d"),  # 僅日期
-        ],
-    ),
-    yaxis=dict(tickformat='.2f'),  # 數值顯示至小數點後兩位
-    yaxis_title='Value',
-    height=500,
-    margin=dict(b=0, l=0, r=90, t=90+30*(axis_count/3)),
-    dragmode='zoom',
-    legend_title_text=None,
-    legend=dict(
-        orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
-    ),
+    title='Stacked Bar Chart with Multiple Scatter Plots',
+    xaxis_title='Categories',
+    yaxis_title='Values',
+    yaxis=dict(title='Primary Y Axis'),
+    yaxis2=dict(
+        title='Secondary Y Axis',
+        overlaying='y',
+        side='right',
+        showgrid=False  # 隱藏輔助 Y 軸的網格線
+    )
 )
+
+fig.show()
