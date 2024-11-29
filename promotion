@@ -1,149 +1,56 @@
-axis_count = 1
+# 如果有選擇 PI tags 且有日期範圍，則提取並繪製 PI 數據
 if tags and start_date and end_date:
-    servername = "grape"  # 設定 PI 伺服器名稱
-    with PI.PIServer(server=servername) as server:
-        points = server.search(tags)  # 搜尋所選的 PI tags
-        if len(points) > 0:
-            series = []
-            for p in points:
-                # 使用選擇的頻率取樣數據
-                sampling_interval = '30m'  # 默認為 30 分鐘
-                if interval == 'd':
-                    sampling_interval = '30m'
-                elif interval == 'h':
-                    sampling_interval = '30m'
-                elif interval == '5m':
-                    sampling_interval = '5m'  # 若選擇 "5m" 則設置為 5 分鐘
-                elif interval == '1m':
-                    sampling_interval = '1m'  # 若選擇 "1m" 則設置為 1 分鐘
-
-                data = p.interpolated_values(
-                    start_time=start_date,
-                    end_time=end_date,
-                    interval=sampling_interval
-                )
-
-                # 將數據轉換為 DataFrame 並重新設置索引
-                interpolated_data = pd.DataFrame(data).reset_index()
-                interpolated_data.columns = ['Timestamp', p.name]
-
-                # 將非數字型資料轉換為 None
-                def convert_to_numeric(val):
-                    try:
-                        return float(val)
-                    except (ValueError, TypeError):
-                        return None  # 如果無法轉換，返回 None
-
-                interpolated_data[p.name] = interpolated_data[p.name].apply(convert_to_numeric)
-                interpolated_data['Timestamp'] = pd.to_datetime(interpolated_data['Timestamp'])
-                interpolated_data.set_index('Timestamp', inplace=True)
-
-                # 根據使用者選擇的 interval 將數據重新取樣
-                if interval == 'd':  # 若選擇每日資料
-                    resampled_data = interpolated_data.resample('1D').mean()
-                elif interval == 'h':  # 若選擇每小時資料
-                    resampled_data = interpolated_data.resample('1H').mean()
-                elif interval == '5m':  # 若選擇5m資料
-                    resampled_data = interpolated_data.resample('5min').mean()
-                else:  # 否則1m
-                    resampled_data = interpolated_data
-
-                series.append(resampled_data)  # 將每個 Tag 的數據加入 series 清單
-
-            # 合併所有 PI tags 數據
-            df = pd.concat(series, axis=1)
-            print(df)
-            df.to_excel('PI.xlsx', index=False)
-
-            # 設定顏色循環，避免顏色數量限制
-            color_idx = 0
-            for tag in tags:
-                if tag in df.columns:
-                    yaxis_name = f'y{axis_count}' if axis_count > 1 else 'y'
-                    color = color_palette[color_idx % len(color_palette)]  # 獲取顏色
+    color_idx = 0
+    for idx, tag in enumerate(tags):
+        if tag in df.columns:
+            # 判斷 defect 是否為空
+            if not defect:
+                # 無選擇 defect：第一個 tag 使用主 Y 軸，其餘 tags 疊加到額外 Y 軸
+                if idx == 0:
                     fig.add_trace(go.Scatter(
                         x=df.index,
                         y=df[tag],
                         mode='lines',
                         name=tag,
-                        line=dict(color=color),  # 使用顏色索引
-                        yaxis=yaxis_name,
-                        hovertemplate='Time: %{x}<br>Value: %{y:.2f}'
+                        line=dict(color=color_palette[color_idx % len(color_palette)]),
+                        yaxis='y',  # 主 Y 軸
                     ))
-
-                    # 設定額外的 Y 軸屬性，並確保顏色一致
+                else:
+                    fig.add_trace(go.Scatter(
+                        x=df.index,
+                        y=df[tag],
+                        mode='lines',
+                        name=tag,
+                        line=dict(color=color_palette[color_idx % len(color_palette)]),
+                        yaxis=f'y{idx+1}',  # 額外 Y 軸
+                    ))
                     fig.update_layout(
-                        **{yaxis_name: dict(
-                            title=tag,  # 為該軸設定標題
-                            titlefont=dict(color=color),
-                            tickfont=dict(color=color),
-                            anchor="free" if axis_count > 1 else "x",
-                            overlaying='y' if axis_count > 1 else None,
-                            side="right" if axis_count > 1 else "left",
-                            position=1 - (0.04 * (axis_count - 1)) if axis_count > 1 else None
+                        **{f'yaxis{idx+1}': dict(
+                            overlaying='y',  # 疊加到主 Y 軸
+                            side='right',
+                            position=1 - 0.04 * (idx - 1),  # 計算位置
+                            titlefont=dict(color=color_palette[color_idx % len(color_palette)]),
+                            tickfont=dict(color=color_palette[color_idx % len(color_palette)]),
                         )}
                     )
+            else:
+                # 有選擇 defect：所有 tags 疊加到額外 Y 軸
+                fig.add_trace(go.Scatter(
+                    x=df.index,
+                    y=df[tag],
+                    mode='lines',
+                    name=tag,
+                    line=dict(color=color_palette[color_idx % len(color_palette)]),
+                    yaxis=f'y{idx+2}',  # 額外 Y 軸
+                ))
+                fig.update_layout(
+                    **{f'yaxis{idx+2}': dict(
+                        overlaying='y',  # 疊加到主 Y 軸
+                        side='right',
+                        position=1 - 0.04 * idx,  # 計算位置
+                        titlefont=dict(color=color_palette[color_idx % len(color_palette)]),
+                        tickfont=dict(color=color_palette[color_idx % len(color_palette)]),
+                    )}
+                )
 
-                    axis_count += 1
-                    color_idx += 1
-                            
-                            # 將數據轉換為 DataFrame 並重新設置索引
-                            interpolated_data = pd.DataFrame(data).reset_index()
-                            interpolated_data.columns = ['Timestamp', p.name]
-                            
-                            # 將非數字型資料轉換為 None
-                            def convert_to_numeric(val):
-                                try:
-                                    return float(val)
-                                except (ValueError, TypeError):
-                                    return None  # 如果無法轉換，返回 None
-                            
-                            interpolated_data[p.name] = interpolated_data[p.name].apply(convert_to_numeric)
-                            interpolated_data['Timestamp'] = pd.to_datetime(interpolated_data['Timestamp'])
-                            interpolated_data.set_index('Timestamp', inplace=True)
-
-                            # 根據使用者選擇的 interval 將數據重新取樣
-                            if interval == 'd':  # 若選擇每日資料
-                                resampled_data = interpolated_data.resample('1D').mean()
-                            elif interval == 'h':  # 若選擇每小時資料
-                                resampled_data = interpolated_data.resample('1H').mean()
-                            elif interval == '5m':  # 若選擇5m資料
-                                resampled_data = interpolated_data.resample('5min').mean()
-                            else:  # 否則1m
-                                resampled_data = interpolated_data
-
-                            series.append(resampled_data)  # 將每個 Tag 的數據加入 series 清單
-
-                        # 合併所有 PI tags 數據
-                        df = pd.concat(series, axis=1)
-                        print(df)
-                        df.to_excel('PI.xlsx', index=False)
-
-                        # 設定顏色循環，避免顏色數量限制
-                        color_idx = 0
-                        for tag in tags:
-                            if tag in df.columns:
-                                fig.add_trace(go.Scatter(x=df.index, 
-                                                        y=df[tag], 
-                                                        mode='lines', 
-                                                        name=tag,
-                                                        line=dict(color=color_palette[color_idx % len(color_palette)]),  
-                                                        yaxis='y' + str(axis_count),
-                                                        hovertemplate='Time: %{x}<br>Value: %{y:.2f}'
-                                                        ))
-
-                                # 設定額外的 Y 軸屬性
-                                fig.update_layout(
-                                        yaxis=dict(side='right',
-                                        titlefont=dict(color=color_palette[color_idx % len(color_palette)]),
-                                        tickfont=dict(color=color_palette[color_idx % len(color_palette)])),
-
-                                    **{'yaxis' + str(axis_count + 1): dict(
-                                        titlefont=dict(color=color_palette[color_idx % len(color_palette)]),
-                                        tickfont=dict(color=color_palette[color_idx % len(color_palette)]),
-                                        anchor="free",
-                                        overlaying='y',
-                                        side="right",
-                                        position=1-(0.04*(axis_count))
-                                    )}
-                                )
+            color_idx += 1  # 更新顏色索引
