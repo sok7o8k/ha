@@ -1,60 +1,40 @@
-xaxis=dict(domain=[0, 1-((len(tags)-2)*0.04)],
-TypeError: object of type 'NoneType' has no len()
+# 計算總共的 Y 軸數量
+total_y_axes = len(tags) if tags else 1  # 預設至少有主 Y 軸
+if defect:  # 若有選擇 defect，額外計算堆疊圖的主 Y 軸
+    total_y_axes += 1
 
+# 動態調整 X 軸 domain（減少退縮範圍）
+x_domain_end = 1 - ((total_y_axes - 1) * 0.04) if total_y_axes > 1 else 1
 
-# 如果有選擇 PI tags 且有日期範圍，則提取並繪製 PI 數據
-if tags and start_date and end_date:
-    color_idx = 0
-    for idx, tag in enumerate(tags):
-        if tag in df.columns:
-            # 判斷 defect 是否為空
-            if not defect:
-                # 無選擇 defect：第一個 tag 使用主 Y 軸，其餘 tags 疊加到額外 Y 軸
-                if idx == 0:
-                    fig.add_trace(go.Scatter(
-                        x=df.index,
-                        y=df[tag],
-                        mode='lines',
-                        name=tag,
-                        line=dict(color=color_palette[color_idx % len(color_palette)]),
-                        yaxis='y',  # 主 Y 軸
-                    ))
-                else:
-                    fig.add_trace(go.Scatter(
-                        x=df.index,
-                        y=df[tag],
-                        mode='lines',
-                        name=tag,
-                        line=dict(color=color_palette[color_idx % len(color_palette)]),
-                        yaxis=f'y{idx+1}',  # 額外 Y 軸
-                    ))
-                    fig.update_layout(
-                        **{f'yaxis{idx+1}': dict(
-                            overlaying='y',  # 疊加到主 Y 軸
-                            side='right',
-                            position=1 - 0.04 * (idx - 1),  # 計算位置
-                            titlefont=dict(color=color_palette[color_idx % len(color_palette)]),
-                            tickfont=dict(color=color_palette[color_idx % len(color_palette)]),
-                        )}
-                    )
-            else:
-                # 有選擇 defect：所有 tags 疊加到額外 Y 軸
-                fig.add_trace(go.Scatter(
-                    x=df.index,
-                    y=df[tag],
-                    mode='lines',
-                    name=tag,
-                    line=dict(color=color_palette[color_idx % len(color_palette)]),
-                    yaxis=f'y{idx+2}',  # 額外 Y 軸
-                ))
-                fig.update_layout(
-                    **{f'yaxis{idx+2}': dict(
-                        overlaying='y',  # 疊加到主 Y 軸
-                        side='right',
-                        position=1 - 0.04 * idx,  # 計算位置
-                        titlefont=dict(color=color_palette[color_idx % len(color_palette)]),
-                        tickfont=dict(color=color_palette[color_idx % len(color_palette)]),
-                    )}
-                )
+# 計算選擇的 defect 數量
+defect_count = len(defect) if defect else 0
 
-            color_idx += 1  # 更新顏色索引
+# 動態調整頂部邊距 (預設 90，額外增加 10 像素 * 每 3 個 defect)
+top_margin = 90 + 30 * (total_y_axes // 3) + 10 * (defect_count // 3)
+
+# 更新圖表的佈局和標題
+fig.update_layout(
+    showlegend=True,
+    title=f'{tank} Performance and Process Chart',
+    xaxis=dict(
+        domain=[0, x_domain_end],  # 動態設定 X 軸的 domain 範圍
+        tickformat='%Y-%m-%d\n%H:%M:%S',
+        title='Date'
+    ),
+    yaxis=dict(tickformat='.2%', title='Value'),  # 主 Y 軸設定
+    height=500,
+    margin=dict(
+        b=0, 
+        l=0, 
+        r=90 + (total_y_axes - 1) * 30,  # 動態增加右邊邊距，避免軸標題擁擠
+        t=top_margin  # 頂部邊距根據 defect 數量動態調整
+    ),
+    dragmode='zoom',
+    legend=dict(
+        orientation="h", 
+        yanchor="bottom", 
+        y=1.02, 
+        xanchor="right", 
+        x=1
+    ),
+)
