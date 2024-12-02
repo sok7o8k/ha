@@ -462,7 +462,8 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, p
                                     line=dict(color=color_palette[color_idx % len(color_palette)]),
                                     yaxis='y2',  # 主 Y 軸
                                 ))
-                                fig.update_layout(yaxis=dict(
+                                fig.update_layout(
+                                    yaxis2=dict(
                                     title=tag,
                                     side='right',
                                     position=1,
@@ -514,7 +515,8 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, p
                                     line=dict(color=color_palette[color_idx % len(color_palette)]),
                                     yaxis='y2',  # 主 Y 軸
                                 ))
-                                fig.update_layout(yaxis=dict(
+                                fig.update_layout(
+                                    yaxis2=dict(
                                     title=tag,
                                     overlaying='y',
                                     side='right',
