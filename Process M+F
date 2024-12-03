@@ -5,9 +5,6 @@ from dash import Dash, html, dcc, Input, Output, State, dash_table
 import dash_bootstrap_components as dbc
 from dash.exceptions import PreventUpdate
 import pandas as pd
-import base64
-import io
-from dash_auth import BasicAuth
 import PIconnect as PI
 from datetime import datetime, timedelta
 
@@ -21,8 +18,8 @@ from pyadomd import Pyadomd
 import pandas as pd
 
 conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
-query_M = " SELECT NON EMPTY { [Measures].[M_Defect Loss%], [Measures].[F_Defect Loss%] } ON COLUMNS, NON EMPTY { ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * [Tank].[Tank ID].[Tank ID].ALLMEMBERS * [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS ) } DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME ON ROWS FROM ( SELECT ( { [Defect Tracking].[Defect SubGroup].&[F_Material Loss]&[Inclusion], [Defect Tracking].[Defect SubGroup].[All] } ) ON COLUMNS FROM ( SELECT ( { [Defect Tracking].[Defect Group].&[M_Melt Loss] } ) ON COLUMNS FROM ( SELECT ( { [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], [Tank].[Tank ID].&[TC03], [Tank].[Tank ID].&[TC04], [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], [Tank].[Tank ID].&[TC07], [Tank].[Tank ID].&[TC08], [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], [Tank].[Tank ID].&[TC11], [Tank].[Tank ID].&[TC12], [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], [Tank].[Tank ID].&[TC15], [Tank].[Tank ID].&[TC16], [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], [Tank].[Tank ID].&[TC19], [Tank].[Tank ID].&[TC20], [Tank].[Tank ID].&[TC21] } ) ON COLUMNS FROM ( SELECT ( { [Time Crate].[CR_Year].&[2024] } ) ON COLUMNS FROM [PPD_Actual])))) WHERE ( [Time Crate].[CR_Year].&[2024], [Defect Tracking].[Defect Group].&[M_Melt Loss], [Defect Tracking].[Defect SubGroup].CurrentMember ) CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS"
-query_F = " SELECT NON EMPTY { [Measures].[F_Defect Loss%] } ON COLUMNS, NON EMPTY { ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * [Tank].[Tank ID].[Tank ID].ALLMEMBERS * [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS ) } DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME ON ROWS FROM ( SELECT ( { [Defect Tracking].[Defect SubGroup].&[F_Material Loss]&[Inclusion] } ) ON COLUMNS FROM ( SELECT ( { [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], [Tank].[Tank ID].&[TC03], [Tank].[Tank ID].&[TC04], [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], [Tank].[Tank ID].&[TC07], [Tank].[Tank ID].&[TC08], [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], [Tank].[Tank ID].&[TC11], [Tank].[Tank ID].&[TC12], [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], [Tank].[Tank ID].&[TC15], [Tank].[Tank ID].&[TC16], [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], [Tank].[Tank ID].&[TC19], [Tank].[Tank ID].&[TC20], [Tank].[Tank ID].&[TC21] } ) ON COLUMNS FROM ( SELECT ( { [Time Crate].[CR_Year].&[2024] } ) ON COLUMNS FROM [PPD_Actual]))) WHERE ( [Time Crate].[CR_Year].&[2024], [Defect Tracking].[Defect SubGroup].&[F_Material Loss]&[Inclusion] ) CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS"
+query_M = " SELECT NON EMPTY { [Measures].[M_Defect Loss%] } ON COLUMNS, NON EMPTY { ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * [Tank].[Tank ID].[Tank ID].ALLMEMBERS * [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS ) } DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME ON ROWS FROM ( SELECT ( { [Defect Tracking].[Defect Group].&[M_Melt Loss] } ) ON COLUMNS FROM ( SELECT ( { [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], [Tank].[Tank ID].&[TC03], [Tank].[Tank ID].&[TC04], [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], [Tank].[Tank ID].&[TC07], [Tank].[Tank ID].&[TC08], [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], [Tank].[Tank ID].&[TC11], [Tank].[Tank ID].&[TC12], [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], [Tank].[Tank ID].&[TC15], [Tank].[Tank ID].&[TC16], [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], [Tank].[Tank ID].&[TC19], [Tank].[Tank ID].&[TC20] } ) ON COLUMNS FROM ( SELECT ( { [Time Crate].[CR_Year].&[2024], [Time Crate].[CR_Year].&[2023] } ) ON COLUMNS FROM [PPD_Actual]))) WHERE ( [Time Crate].[CR_Year].CurrentMember, [Defect Tracking].[Defect Group].&[M_Melt Loss] ) CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS"
+query_F = " SELECT NON EMPTY { [Measures].[F_Defect Loss%] } ON COLUMNS, NON EMPTY { ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * [Tank].[Tank ID].[Tank ID].ALLMEMBERS * [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS ) } DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME ON ROWS FROM ( SELECT ( { [Defect Tracking].[Defect ID].&[165], [Defect Tracking].[Defect ID].&[1028], [Defect Tracking].[Defect ID].&[311], [Defect Tracking].[Defect ID].&[252], [Defect Tracking].[Defect ID].&[407], [Defect Tracking].[Defect ID].&[171], [Defect Tracking].[Defect ID].&[838], [Defect Tracking].[Defect ID].&[169], [Defect Tracking].[Defect ID].&[836], [Defect Tracking].[Defect ID].&[167], [Defect Tracking].[Defect ID].&[834], [Defect Tracking].[Defect ID].&[170], [Defect Tracking].[Defect ID].&[837], [Defect Tracking].[Defect ID].&[168], [Defect Tracking].[Defect ID].&[835] } ) ON COLUMNS FROM ( SELECT ( { [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], [Tank].[Tank ID].&[TC03], [Tank].[Tank ID].&[TC04], [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], [Tank].[Tank ID].&[TC07], [Tank].[Tank ID].&[TC08], [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], [Tank].[Tank ID].&[TC11], [Tank].[Tank ID].&[TC12], [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], [Tank].[Tank ID].&[TC15], [Tank].[Tank ID].&[TC16], [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], [Tank].[Tank ID].&[TC19], [Tank].[Tank ID].&[TC20] } ) ON COLUMNS FROM ( SELECT ( { [Time Crate].[CR_Year].&[2024], [Time Crate].[CR_Year].&[2023] } ) ON COLUMNS FROM [PPD_Actual]))) WHERE ( [Time Crate].[CR_Year].CurrentMember ) CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS"
 
 
 with Pyadomd(conn_str) as conn:
@@ -62,7 +59,6 @@ import dash_html_components as html
 from dash.dependencies import Input, Output, State
 import dash_mantine_components as dmc
 
-# 创建 Dash 应用
 app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP])
 
 tanks = df_cleaned_M["Tank ID"].unique()
@@ -76,7 +72,7 @@ app.layout = dbc.Container([
                 dbc.CardBody([
                     dmc.DateRangePicker(
                         id='date-picker',
-                        minDate=df_cleaned_M['CR_Date'].min().strftime('%Y-%m-%d'),
+                        minDate='2009-01-01',
                         maxDate=(datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d'),
                         value=[
                             (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
@@ -93,7 +89,7 @@ app.layout = dbc.Container([
                             {'label': '-1 month', 'value': '1M'},
                             {'label': '-7 days', 'value': '7D'},
                         ],
-                        value='1M',  # 默认快捷日期选项
+                        value='1M',  
                         labelStyle={'display': 'inline-block', 'margin-right': '10px'},
                         className="mb-3"
                     ),
@@ -234,7 +230,7 @@ def update_datepicker(selected_period):
     elif selected_period == '7D':
         start_date = today - timedelta(days=7)
     else:
-        start_date = today - timedelta(days=30)  # 默认近一个月
+        start_date = today - timedelta(days=30)  
     end_date = today + timedelta(days=1)
 
     return [start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')]
@@ -280,11 +276,11 @@ def update_defect_picker(loss_type, tank, date_range):
     else:
         return [], []
 
-    # 获取唯一的 Defect ID 选项
+    # 獲取唯一的 Defect ID 選項
     all_defects = filtered_df["Defect ID"].dropna().unique()
     defect_options = [{"label": defect, "value": defect} for defect in all_defects]
 
-    # 默认选中所有 Defect
+    # 默認選中所有 Defect
     default_values = list(all_defects)
 
     return defect_options, default_values
@@ -367,7 +363,7 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, p
             ]
             filtered_df = pd.concat([filtered_df_melting, filtered_df_finishing])
         print(filtered_df)
-        # 绘制 Defect 数据
+        # 繪製 Defect
         if defect:
             final_df = filtered_df[filtered_df['Defect ID'].isin(defect)]
             for selected_defect in defect:
@@ -551,7 +547,7 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, p
     defect_count = len(defect) if defect else 0
 
     # 動態調整頂部邊距 (預設 90，額外增加 10 像素 * 每 3 個 defect)
-    top_margin = 90 + 20 * (total_y_axes) + 20 * (defect_count // 2)
+    top_margin = 90 + 20 * (total_y_axes //2 ) + 20 * (defect_count // 2)
 
     # 更新圖表的佈局和標題
     fig.update_layout(
