@@ -174,7 +174,28 @@ app.layout = dbc.Container([
                 ]),
             ]),
         ], className="mb-3"),
-    ], width=5)
+    ], width=5),
+    ]),
+    dbc.Row([
+    dbc.Col([
+        dbc.Card([
+            dbc.CardHeader("Pi data Y軸設定"),
+            dbc.CardBody([
+                html.Div([
+                    dcc.RadioItems(
+                        id="pi-y-axis-setting",
+                        options=[
+                            {'label': 'Single', 'value': 'single'},
+                            {'label': 'Multiple', 'value': 'multiple'}
+                        ],
+                        value='multiple',  # 預設為 multiple 模式
+                        labelStyle={'display': 'inline-block', 'margin-right': '10px'},
+                        style={'margin-bottom': '10px'}
+                    ),
+                ]),
+            ]),
+        ], className="mb-3"),
+    ], width=5),
     ]),
         dbc.Row([
         dbc.Col([
@@ -310,10 +331,10 @@ defect_colors = {
     Input("tank-picker", "value"),
     Input("loss-type", "value"),
     Input("defect-picker", "value"),
+    Input("pi-y-axis-setting", "value")  # 新增 Y 軸模式輸入
 )
-def update_combined_graph(tags, date_range, interval, tank, loss_type, defect):
+def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, pi_y_axis_mode):
     fig = go.Figure()
-    axis_count = 2
 
     if not date_range or len(date_range) != 2:
         raise PreventUpdate
@@ -426,51 +447,140 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect):
 
                 # 設定顏色循環，避免顏色數量限制
                 color_idx = 0
-                for tag in tags:
+                for idx, tag in enumerate(tags):
                     if tag in df.columns:
-                        fig.add_trace(go.Scatter(x=df.index, 
-                                                y=df[tag], 
-                                                mode='lines', 
-                                                name=tag,
-                                                line=dict(color=color_palette[color_idx % len(color_palette)]),  
-                                                yaxis='y' + str(axis_count),
-                                                hovertemplate='Time: %{x}<br>Value: %{y:.2f}'
-                                                ))
-
-                        # 設定額外的 Y 軸屬性
-                        fig.update_layout(
-                            **{'yaxis' + str(axis_count): dict(
-                                titlefont=dict(color=color_palette[color_idx % len(color_palette)]),
-                                tickfont=dict(color=color_palette[color_idx % len(color_palette)]),
-                                anchor="free",
-                                overlaying='y',
-                                side="right",
-                                position=1-(0.04*(axis_count-1))
-                            )}
-                        )
-
-                        axis_count += 1  # 增加 Y 軸數量計數器
+                        # 判斷 defect 是否為空
+                        if not defect:
+                            # 無選擇 defect：第一個 tag 使用主 Y 軸，其餘 tags 疊加到額外 Y 軸
+                            # 添加 Y 軸設置根據選擇切換
+                            if pi_y_axis_mode == 'single':
+                                fig.add_trace(go.Scatter(
+                                    x=df.index,
+                                    y=df[tag],
+                                    mode='lines',
+                                    name=tag,
+                                    line=dict(color=color_palette[color_idx % len(color_palette)]),
+                                    yaxis='y2',  # 主 Y 軸
+                                ))
+                                fig.update_layout(
+                                    yaxis2=dict(
+                                    side='right',
+                                    position=1,
+                                    tickfont=dict(color='black'),
+                                ))
+                            elif pi_y_axis_mode == 'multiple':
+                                if idx == 0:
+                                    fig.add_trace(go.Scatter(
+                                        x=df.index,
+                                        y=df[tag],
+                                        mode='lines',
+                                        name=tag,
+                                        line=dict(color=color_palette[color_idx % len(color_palette)]),
+                                        yaxis='y',  # 主 Y 軸
+                                    ))
+                                    fig.update_layout(yaxis=dict(
+                                            title=tag,
+                                            side='right',
+                                            position=1,
+                                            titlefont=dict(color=color_palette[color_idx % len(color_palette)]),
+                                            tickfont=dict(color=color_palette[color_idx % len(color_palette)]),
+                                        ))
+                                else:
+                                    fig.add_trace(go.Scatter(
+                                        x=df.index,
+                                        y=df[tag],
+                                        mode='lines',
+                                        name=tag,
+                                        line=dict(color=color_palette[color_idx % len(color_palette)]),
+                                        yaxis=f'y{idx+1}',  # 額外 Y 軸
+                                    ))
+                                    fig.update_layout(
+                                        **{f'yaxis{idx+1}': dict(
+                                            overlaying='y',  # 疊加到主 Y 軸
+                                            side='right' ,
+                                            position=0.96 - 0.04 * (idx - 1),  # 計算位置
+                                            titlefont=dict(color=color_palette[color_idx % len(color_palette)]),
+                                            tickfont=dict(color=color_palette[color_idx % len(color_palette)]),
+                                        )}
+                                    )
+                        else:
+                            if pi_y_axis_mode == 'single':
+                                fig.add_trace(go.Scatter(
+                                    x=df.index,
+                                    y=df[tag],
+                                    mode='lines',
+                                    name=tag,
+                                    line=dict(color=color_palette[color_idx % len(color_palette)]),
+                                    yaxis='y2',  # 主 Y 軸
+                                ))
+                                fig.update_layout(
+                                    yaxis2=dict(
+                                    overlaying='y',
+                                    side='right',
+                                    position=1,
+                                    tickfont=dict(color='black'),
+                                ))
+                            elif pi_y_axis_mode == 'multiple':                           
+                                # 有選擇 defect：所有 tags 疊加到額外 Y 軸
+                                fig.add_trace(go.Scatter(
+                                    x=df.index,
+                                    y=df[tag],
+                                    mode='lines',
+                                    name=tag,
+                                    line=dict(color=color_palette[color_idx % len(color_palette)]),
+                                    yaxis=f'y{idx+2}',  # 額外 Y 軸
+                                ))
+                                fig.update_layout(
+                                    **{f'yaxis{idx+2}': dict(
+                                        overlaying='y',  # 疊加到主 Y 軸
+                                        side='right',
+                                        position=1 - 0.04 * idx,  # 計算位置
+                                        titlefont=dict(color=color_palette[color_idx % len(color_palette)]),
+                                        tickfont=dict(color=color_palette[color_idx % len(color_palette)]),
+                                    )}
+                                )
                         color_idx += 1  # 更新顏色索引
+
+    # 計算總共的 Y 軸數量
+    total_y_axes = len(tags) if tags else 1  # 預設至少有主 Y 軸
+
+    # 動態調整 X 軸 domain（減少退縮範圍）
+    x_domain_end = 1 if pi_y_axis_mode == 'single' else 1- ((total_y_axes - 1) * 0.04) 
+
+    # 計算選擇的 defect 數量
+    defect_count = len(defect) if defect else 0
+
+    # 動態調整頂部邊距 (預設 90，額外增加 10 像素 * 每 3 個 defect)
+    top_margin = 90 + 20 * (total_y_axes) + 20 * (defect_count // 2)
 
     # 更新圖表的佈局和標題
     fig.update_layout(
         showlegend=True,
-        title=f'{tank} Performance and Process Chart',
-        xaxis=dict(domain=[0, 1-((axis_count-2)*0.04)], 
-                   tickformat='%Y-%m-%d\n%H:%M:%S',
-                   title='Date'),
-        yaxis=dict(tickformat='.2%'),
-        yaxis_title='Value',
+        title=f'{tank} Inclusion loss and Process Chart' if defect else f'{tank} Process Chart',
+        xaxis=dict(
+            domain=[0, x_domain_end],  # 動態設定 X 軸的 domain 範圍
+            tickformat='%Y-%m-%d\n%H:%M:%S',
+            title='Date'
+        ),
+        yaxis=dict(tickformat='.2%', title='loss%') if defect else dict(tickformat='f', title='Value'),
         height=500,
-        margin=dict(b=0, l=0, r=90, t=90+30*(axis_count/3)),
+        margin=dict(
+            b=0, 
+            l=0, 
+            r=90 + (total_y_axes / 3) * 30,  # 動態增加右邊邊距，避免軸標題擁擠
+            t=top_margin  # 頂部邊距根據 defect 數量動態調整
+        ),
         dragmode='zoom',
-        legend_title_text=None,
         legend=dict(
             orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
         ),
-    )
+        )
 
     return fig  # 回傳更新後的圖表
+
+
+
+
 
 if __name__ == '__main__':
     app.run_server(debug=True, port='7788')
