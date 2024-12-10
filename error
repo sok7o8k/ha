@@ -1,3 +1,14 @@
-Microsoft.AnalysisServices.AdomdClient.AdomdErrorResponseException: Parser: The end of the input was reached.
-   於 Microsoft.AnalysisServices.AdomdClient.AdomdConnection.XmlaClientProvider.Microsoft.AnalysisServices.AdomdClient.IExecuteProvider.ExecuteTabular(CommandBehavior behavior, ICommandContentProvider contentProvider, AdomdPropertyCollection commandProperties, IDataParameterCollection parameters)
-   於 Microsoft.AnalysisServices.AdomdClient.AdomdCommand.ExecuteReader(CommandBehavior behavior)
+query_m = f"""
+    SELECT NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
+           NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
+                         [Tank].[Tank ID].[Tank ID].&[{tank}] *
+                         [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
+           DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
+    ON ROWS 
+    FROM ( SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] :
+                         [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
+           ON COLUMNS 
+           FROM [PPD_Actual]) 
+    WHERE ( [Time Crate].[CR_Year].CurrentMember, [Defect Tracking].[Defect Group].&[M_Melt Loss] ) 
+    CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
+"""
