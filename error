@@ -1,85 +1,77 @@
-import dash
-from dash import dcc, html, Input, Output
-import pandas as pd
-import plotly.graph_objs as go
-from pyadomd import Pyadomd
+def query_data(date_range, tank):
+    if not date_range or not tank:
+        raise PreventUpdate  # 如果條件不完整，則不觸發查詢
 
-# 數據庫連接字符串
-conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
+    conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
+    start_date, end_date = map(pd.to_datetime, date_range)
 
-# 初始化 Dash 應用
-app = dash.Dash(__name__)
-
-# 假設 Tank IDs 和年份的範例選項
-default_tanks = [f"TC{i:02}" for i in range(1, 22)]
-default_years = ["2023", "2024"]
-
-# Dash 前端佈局
-app.layout = html.Div([
-    html.H1("Defect Loss Analysis"),
-    
-    dcc.Dropdown(
-        id='tank-picker',
-        options=[{'label': tank, 'value': tank} for tank in default_tanks],
-        value=default_tanks,  # 預設選擇所有 Tank
-        multi=True,
-    ),
-    
-    dcc.DatePickerRange(
-        id='date-picker',
-        start_date='2023-01-01',
-        end_date='2024-12-31',
-        display_format='YYYY-MM-DD',
-    ),
-    
-    dcc.Graph(id='defect-loss-graph'),
-])
-
-# 更新圖表的回調函數
-@app.callback(
-    Output('defect-loss-graph', 'figure'),
-    Input('tank-picker', 'value'),
-    Input('date-picker', 'start_date'),
-    Input('date-picker', 'end_date'),
-)
-def update_graph(selected_tanks, start_date, end_date):
-    if not selected_tanks:  # 確保至少選擇一個 Tank
-        return go.Figure()  # 返回空圖表
-
-    # 動態生成 MDX 查詢
-    tanks_query = ', '.join([f'[Tank].[Tank ID].&[{tank}]' for tank in selected_tanks])
-    query_M = f"""
-    SELECT NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS,
-    NON EMPTY {{
-        ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS *
-         [Tank].[Tank ID].[Tank ID].ALLMEMBERS *
-         [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS)
-    }} DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME ON ROWS
-    FROM (
-        SELECT ({{ {tanks_query} }}) ON COLUMNS FROM (
-        SELECT ({{ [Time Crate].[CR_Date].&[{start_date}]:[Time Crate].[CR_Date].&[{end_date}] }}) ON COLUMNS FROM [PPD_Actual]
-        )
-    )
-    WHERE ([Time Crate].[CR_Year].CurrentMember)
-    CELL PROPERTIES VALUE
+    # 查詢 Melting Loss 資料
+    query_m = f"""
+        SELECT NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
+               NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
+                             [Tank].[Tank ID].[Tank ID].ALLMEMBERS *
+                             [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
+               DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
+        ON ROWS 
+        FROM ( SELECT ( { [Defect Tracking].[Defect Group].&[M_Melt Loss] } ) ON COLUMNS 
+        FROM ( SELECT ( { [Tank].[Tank ID].&[tank]}) ON COLUMNS 
+        FROM ( SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] :
+                             [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
+               ON COLUMNS 
+               FROM [PPD_Actual]) 
+              WHERE ( [Time Crate].[CR_Year].CurrentMember, [Defect Tracking].[Defect Group].&[M_Melt Loss] ) 
+              CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
     """
+# #
+#     "  SELECT NON EMPTY { [Measures].[M_Defect Loss%] } ON COLUMNS, 
+#               NON EMPTY { ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
+#               [Tank].[Tank ID].[Tank ID].ALLMEMBERS * 
+#               [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS ) } 
+#               DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
+#               ON ROWS 
+#               FROM ( SELECT ( { [Defect Tracking].[Defect Group].&[M_Melt Loss] } ) ON COLUMNS 
+#               FROM ( SELECT ( { [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], [Tank].[Tank ID].&[TC03],
+#                [Tank].[Tank ID].&[TC04], [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], [Tank].[Tank ID].&[TC07],
+#                 [Tank].[Tank ID].&[TC08], [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], [Tank].[Tank ID].&[TC11],
+#                  [Tank].[Tank ID].&[TC12], [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], [Tank].[Tank ID].&[TC15],
+#                   [Tank].[Tank ID].&[TC16], [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], [Tank].[Tank ID].&[TC19],
+#                    [Tank].[Tank ID].&[TC20], [Tank].[Tank ID].&[TC21] } ) ON COLUMNS 
+#               FROM ( SELECT ( { [Time Crate].[CR_Year].&[2024], [Time Crate].[CR_Year].&[2023] } ) ON COLUMNS 
+#               FROM [PPD_Actual]))) 
+#               WHERE ( [Time Crate].[CR_Year].CurrentMember, [Defect Tracking].[Defect Group].&[M_Melt Loss] ) 
+#               CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS"
+# #
 
-    # 查詢數據
-    try:
-        with Pyadomd(conn_str) as conn:
-            with conn.cursor().execute(query_M) as cur:
-                # 將查詢結果轉換為 DataFrame
-                data = cur.fetchall()
-                df_M = pd.DataFrame(data, columns=[i.name for i in cur.description])
-    except Exception as e:
-        return go.Figure()  # 返回空圖表，如果出現錯誤
+    with Pyadomd(conn_str) as conn:
+        with conn.cursor().execute(query_m) as cur:
+            df_m = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
+    print(df_m)
+    # 查詢 Finishing Loss 資料
+    query_f = f"""
+        SELECT NON EMPTY {{ [Measures].[F_Defect Loss%] }} ON COLUMNS, 
+               NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
+                             [Tank].[Tank ID].[Tank ID].&[{tank}] *
+                             [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
+               DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
+        ON ROWS 
+        FROM ( SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] :
+                             [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
+               ON COLUMNS 
+               FROM [PPD_Actual]) 
+        WHERE ([Time Crate].[CR_Date].CurrentMember)
+        CELL PROPERTIES VALUE
+    """
+    with Pyadomd(conn_str) as conn:
+        with conn.cursor().execute(query_f) as cur:
+            df_f = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
+    print(df_f)
+    # 數據清理
+    df_cleaned_M = clean_data(df_m)
+    df_cleaned_F = clean_data(df_f)
+    # 將數據轉換為字典格式返回
+    return df_cleaned_M.to_dict("records"), df_cleaned_F.to_dict("records")
 
-    # 繪製圖表
-    fig = go.Figure()
-    fig.add_trace(go.Scatter(x=df_M['CR_Date'], y=df_M['M_Defect Loss%'], mode='lines', name='Defect Loss%'))
 
-    fig.update_layout(title="Defect Loss Percentage", xaxis_title="Date", yaxis_title="Defect Loss %")
-    return fig
-
-if __name__ == '__main__':
-    app.run_server(debug=True)
+出現    ( [Defect Tracking].[Defect Group].&[M_Melt Loss] )
+              ^
+SyntaxError: invalid syntax
