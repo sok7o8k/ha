@@ -1,3 +1,49 @@
-Microsoft.AnalysisServices.AdomdClient.AdomdErrorResponseException: 無法將 '2024-11-10' 字串轉換為 date 類型。
-   於 Microsoft.AnalysisServices.AdomdClient.AdomdConnection.XmlaClientProvider.Microsoft.AnalysisServices.AdomdClient.IExecuteProvider.ExecuteTabular(CommandBehavior behavior, ICommandContentProvider contentProvider, AdomdPropertyCollection commandProperties, IDataParameterCollection parameters)
-   於 Microsoft.AnalysisServices.AdomdClient.AdomdCommand.ExecuteReader(CommandBehavior behavior)
+def query_data(date_range, tank):
+    if not date_range or not tank:
+        raise PreventUpdate  # 如果條件不完整，則不觸發查詢
+
+    start_date, end_date = map(pd.to_datetime, date_range)
+
+    # 查詢 Melting Loss 資料
+    query_m = f"""
+        SELECT NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
+               NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
+                             [Tank].[Tank ID].[Tank ID].&[{tank}] *
+                             [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
+               DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
+        ON ROWS 
+        FROM ( SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] :
+                             [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
+               ON COLUMNS 
+               FROM [PPD_Actual]) 
+        WHERE ([Time Crate].[CR_Date].CurrentMember)
+        CELL PROPERTIES VALUE
+    """
+    with Pyadomd(conn_str) as conn:
+        with conn.cursor().execute(query_m) as cur:
+            df_m = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
+
+    # 查詢 Finishing Loss 資料
+    query_f = f"""
+        SELECT NON EMPTY {{ [Measures].[F_Defect Loss%] }} ON COLUMNS, 
+               NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
+                             [Tank].[Tank ID].[Tank ID].&[{tank}] *
+                             [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
+               DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
+        ON ROWS 
+        FROM ( SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] :
+                             [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
+               ON COLUMNS 
+               FROM [PPD_Actual]) 
+        WHERE ([Time Crate].[CR_Date].CurrentMember)
+        CELL PROPERTIES VALUE
+    """
+    with Pyadomd(conn_str) as conn:
+        with conn.cursor().execute(query_f) as cur:
+            df_f = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
+
+    # 數據清理
+    df_cleaned_M = clean_data(df_m)
+    df_cleaned_F = clean_data(df_f)
+    # 將數據轉換為字典格式返回
+    return df_cleaned_M.to_dict("records"), df_cleaned_F.to_dict("records")
