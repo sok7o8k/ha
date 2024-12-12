@@ -1,1 +1,44 @@
-DataFrame columns are not unique, some columns will be omitted.
+from pyadomd import Pyadomd
+import pandas as pd
+
+# 配置参数
+conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
+tank = "TC01"
+start_date = "2024-01-01"
+end_date = "2024-12-31"
+
+# 格式化日期
+start_date_obj = pd.to_datetime(start_date)
+end_date_obj = pd.to_datetime(end_date)
+print(start_date_obj)
+# MDX 查询语句
+query_m = f"""
+    SELECT 
+        NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
+        NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
+                      [Tank].[Tank ID].&[{tank}] * 
+                      [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
+        DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
+    ON ROWS 
+    FROM ( 
+        SELECT ({{ [Time Crate].[CR_Date].&[{start_date_obj.strftime("%Y-%m-%dT00:00:00")}] : 
+                     [Time Crate].[CR_Date].&[{end_date_obj.strftime("%Y-%m-%dT00:00:00")}] }}) 
+        ON COLUMNS 
+        FROM [PPD_Actual]
+    ) 
+    WHERE ( [Defect Tracking].[Defect Group].&[M_Melt Loss] ) 
+    CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
+"""
+
+# 执行查询
+try:
+    with Pyadomd(conn_str) as conn:
+        with conn.cursor().execute(query_m) as cur:
+            # 将查询结果转换为 Pandas DataFrame
+            df_m = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
+            print("Query Results:")
+            print(df_m)
+            df_m.to_excel('dfm.xlsx', index=False)
+except Exception as e:
+    print("Error occurred while querying the data:")
+    print(e)
