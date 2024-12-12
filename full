@@ -235,74 +235,74 @@ def clean_data(df):
 )
 def query_data(date_range, tank):
     if not date_range or not tank:
-        raise PreventUpdate  # 如果條件不完整，則不觸發查詢
+        raise PreventUpdate  # 如果条件不完整，则不触发查询
 
     conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
     start_date, end_date = map(pd.to_datetime, date_range)
 
-    # 查詢 Melting Loss 資料
+    # 查询 Melting Loss 数据
     query_m = f"""
         SELECT NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
                NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
-                             [Tank].[Tank ID].[Tank ID].&[{tank}] *
+                             [Tank].[Tank ID].&[{tank}] *
                              [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
                DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
         ON ROWS 
-        FROM ( SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] :
-                             [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
-               ON COLUMNS 
-               FROM [PPD_Actual]) 
-        WHERE ([Time Crate].[CR_Date].CurrentMember)
+        FROM ( 
+            SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
+                         [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
+            ON COLUMNS 
+            FROM [PPD_Actual]
+        ) 
+        WHERE ( [Defect Tracking].[Defect Group].&[M_Melt Loss] ) 
         CELL PROPERTIES VALUE
     """
-#
-    "  SELECT NON EMPTY { [Measures].[M_Defect Loss%] } ON COLUMNS, 
-              NON EMPTY { ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
-              [Tank].[Tank ID].[Tank ID].ALLMEMBERS * 
-              [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS ) } 
-              DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
-              ON ROWS 
-              FROM ( SELECT ( { [Defect Tracking].[Defect Group].&[M_Melt Loss] } ) ON COLUMNS 
-              FROM ( SELECT ( { [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], [Tank].[Tank ID].&[TC03],
-               [Tank].[Tank ID].&[TC04], [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], [Tank].[Tank ID].&[TC07],
-                [Tank].[Tank ID].&[TC08], [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], [Tank].[Tank ID].&[TC11],
-                 [Tank].[Tank ID].&[TC12], [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], [Tank].[Tank ID].&[TC15],
-                  [Tank].[Tank ID].&[TC16], [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], [Tank].[Tank ID].&[TC19],
-                   [Tank].[Tank ID].&[TC20], [Tank].[Tank ID].&[TC21] } ) ON COLUMNS 
-              FROM ( SELECT ( { [Time Crate].[CR_Year].&[2024], [Time Crate].[CR_Year].&[2023] } ) ON COLUMNS 
-              FROM [PPD_Actual]))) 
-              WHERE ( [Time Crate].[CR_Year].CurrentMember, [Defect Tracking].[Defect Group].&[M_Melt Loss] ) 
-              CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS"
-#
 
-    with Pyadomd(conn_str) as conn:
-        with conn.cursor().execute(query_m) as cur:
-            df_m = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
-    print(df_m)
-    # 查詢 Finishing Loss 資料
+    # 查询 Finishing Loss 数据
     query_f = f"""
         SELECT NON EMPTY {{ [Measures].[F_Defect Loss%] }} ON COLUMNS, 
                NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
-                             [Tank].[Tank ID].[Tank ID].&[{tank}] *
+                             [Tank].[Tank ID].&[{tank}] *
                              [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
                DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
         ON ROWS 
-        FROM ( SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] :
-                             [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
-               ON COLUMNS 
-               FROM [PPD_Actual]) 
-        WHERE ([Time Crate].[CR_Date].CurrentMember)
+        FROM ( 
+            SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
+                         [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
+            ON COLUMNS 
+            FROM [PPD_Actual]
+        ) 
+        WHERE ( [Time Crate].[CR_Date].CurrentMember ) 
         CELL PROPERTIES VALUE
     """
-    with Pyadomd(conn_str) as conn:
-        with conn.cursor().execute(query_f) as cur:
-            df_f = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
-    print(df_f)
-    # 數據清理
-    df_cleaned_M = clean_data(df_m)
-    df_cleaned_F = clean_data(df_f)
-    # 將數據轉換為字典格式返回
-    return df_cleaned_M.to_dict("records"), df_cleaned_F.to_dict("records")
+
+    try:
+        # 查询 Melting Loss 数据
+        with Pyadomd(conn_str) as conn:
+            with conn.cursor().execute(query_m) as cur:
+                df_m = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
+                print("Melting Loss Query Results:")
+                print(df_m)
+                df_m.to_excel('dfm.xlsx', index= False)
+                
+        # 查询 Finishing Loss 数据
+        with Pyadomd(conn_str) as conn:
+            with conn.cursor().execute(query_f) as cur:
+                df_f = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
+                print("Finishing Loss Query Results:")
+                print(df_f)
+
+        # 数据清理
+        df_cleaned_m = clean_data(df_m)
+        df_cleaned_f = clean_data(df_f)
+
+        # 将数据转换为字典格式返回
+        return df_cleaned_m.to_dict("records"), df_cleaned_f.to_dict("records")
+
+    except Exception as e:
+        print("Error occurred during query execution:")
+        print(e)
+        return [], []
 
 @app.callback(
     Output('date-picker', 'value'),
@@ -438,8 +438,6 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, p
     # 將輸入的字典格式數據轉換為 DataFrame
     df_cleaned_M = pd.DataFrame(data_melting) if data_melting else pd.DataFrame()
     df_cleaned_F = pd.DataFrame(data_finishing) if data_finishing else pd.DataFrame()
-    print(df_cleaned_M)
-    print(df_cleaned_F)
     
     # 根據 loss_type 合併數據
     if loss_type in ['melting', 'finishing', 'melting+finishing']:
@@ -702,4 +700,4 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, p
 
 
 if __name__ == '__main__':
-    app.run_server(debug=True, port='7788')
+    app.run_server(debug=True, port='8888')
