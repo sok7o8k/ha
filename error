@@ -1,47 +1,75 @@
-from pyadomd import Pyadomd
-import pandas as pd
+@app.callback(
+    [Output("filtered-data-melting", "data"),
+     Output("filtered-data-finishing", "data")],
+    [Input("date-picker", "value"),
+     Input("tank-picker", "value")]
+)
+def query_data(date_range, tank):
+    if not date_range or not tank:
+        raise PreventUpdate  # 如果条件不完整，则不触发查询
 
-# 配置参数
-conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
-tank = "TC01"
-start_date = "2024-01-01"
-end_date = "2024-12-31"
+    conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
+    start_date, end_date = map(pd.to_datetime, date_range)
 
-# 格式化日期
-start_date_obj = pd.to_datetime(start_date)
-end_date_obj = pd.to_datetime(end_date)
+    # 查询 Melting Loss 数据
+    query_m = f"""
+        SELECT NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
+               NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
+                             [Tank].[Tank ID].&[{tank}] *
+                             [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
+               DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
+        ON ROWS 
+        FROM ( 
+            SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
+                         [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
+            ON COLUMNS 
+            FROM [PPD_Actual]
+        ) 
+        WHERE ( [Defect Tracking].[Defect Group].&[M_Melt Loss] ) 
+        CELL PROPERTIES VALUE
+    """
 
-# MDX 查询语句
-query_m = f"""
-    SELECT 
-        NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
-        NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
-                      [Tank].[Tank ID].&[{tank}] * 
-                      [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
-        DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
-    ON ROWS 
-    FROM ( 
-        SELECT ({{ [Time Crate].[CR_Date].&[{start_date_obj.strftime("%Y-%m-%dT00:00:00")}] : 
-                     [Time Crate].[CR_Date].&[{end_date_obj.strftime("%Y-%m-%dT00:00:00")}] }}) 
-        ON COLUMNS 
-        FROM [PPD_Actual]
-    ) 
-    WHERE ( [Defect Tracking].[Defect Group].&[M_Melt Loss] ) 
-    CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
-"""
+    # 查询 Finishing Loss 数据
+    query_f = f"""
+        SELECT NON EMPTY {{ [Measures].[F_Defect Loss%] }} ON COLUMNS, 
+               NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
+                             [Tank].[Tank ID].&[{tank}] *
+                             [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
+               DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
+        ON ROWS 
+        FROM ( 
+            SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
+                         [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
+            ON COLUMNS 
+            FROM [PPD_Actual]
+        ) 
+        WHERE ( [Time Crate].[CR_Date].CurrentMember ) 
+        CELL PROPERTIES VALUE
+    """
 
-# 打印生成的 MDX 查询
-print("Generated MDX Query for Melting Loss:")
-print(query_m)
+    try:
+        # 查询 Melting Loss 数据
+        with Pyadomd(conn_str) as conn:
+            with conn.cursor().execute(query_m) as cur:
+                df_m = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
+                print("Melting Loss Query Results:")
+                print(df_m)
 
-# 执行查询
-try:
-    with Pyadomd(conn_str) as conn:
-        with conn.cursor().execute(query_m) as cur:
-            # 将查询结果转换为 Pandas DataFrame
-            df_m = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
-            print("Query Results:")
-            print(df_m)
-except Exception as e:
-    print("Error occurred while querying the data:")
-    print(e)
+        # 查询 Finishing Loss 数据
+        with Pyadomd(conn_str) as conn:
+            with conn.cursor().execute(query_f) as cur:
+                df_f = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
+                print("Finishing Loss Query Results:")
+                print(df_f)
+
+        # 数据清理
+        df_cleaned_m = clean_data(df_m)
+        df_cleaned_f = clean_data(df_f)
+
+        # 将数据转换为字典格式返回
+        return df_cleaned_m.to_dict("records"), df_cleaned_f.to_dict("records")
+
+    except Exception as e:
+        print("Error occurred during query execution:")
+        print(e)
+        return [], []
