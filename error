@@ -1,44 +1,117 @@
-from pyadomd import Pyadomd
+from dash import Dash, dcc, html, Input, Output
+import plotly.graph_objects as go
 import pandas as pd
+from pyadomd import Pyadomd
 
-# 配置参数
-conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
-tank = "TC01"
-start_date = "2024-01-01"
-end_date = "2024-12-31"
+# 初始化 Dash 应用
+app = Dash(__name__)
 
-# 格式化日期
-start_date_obj = pd.to_datetime(start_date)
-end_date_obj = pd.to_datetime(end_date)
-print(start_date_obj)
-# MDX 查询语句
-query_m = f"""
-    SELECT 
-        NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
-        NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
-                      [Tank].[Tank ID].&[{tank}] * 
-                      [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
-        DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
-    ON ROWS 
-    FROM ( 
-        SELECT ({{ [Time Crate].[CR_Date].&[{start_date_obj.strftime("%Y-%m-%dT00:00:00")}] : 
-                     [Time Crate].[CR_Date].&[{end_date_obj.strftime("%Y-%m-%dT00:00:00")}] }}) 
-        ON COLUMNS 
-        FROM [PPD_Actual]
-    ) 
-    WHERE ( [Defect Tracking].[Defect Group].&[M_Melt Loss] ) 
-    CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
-"""
+# 配置 ADOMD 连接参数
+CONN_STR = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
 
-# 执行查询
-try:
-    with Pyadomd(conn_str) as conn:
-        with conn.cursor().execute(query_m) as cur:
-            # 将查询结果转换为 Pandas DataFrame
-            df_m = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
-            print("Query Results:")
-            print(df_m)
-            df_m.to_excel('dfm.xlsx', index=False)
-except Exception as e:
-    print("Error occurred while querying the data:")
-    print(e)
+# 定义 Layout
+app.layout = html.Div([
+    html.H1("Defect Loss Dashboard"),
+    
+    # 日期选择器
+    dcc.DatePickerRange(
+        id='date-picker',
+        start_date="2024-01-01",
+        end_date="2024-12-31",
+        display_format='YYYY-MM-DD'
+    ),
+    
+    # Tank ID 单选下拉框
+    dcc.Dropdown(
+        id='tank-picker',
+        options=[
+            {"label": "TC01", "value": "TC01"},
+            {"label": "TC02", "value": "TC02"},
+            {"label": "TC03", "value": "TC03"},
+        ],
+        value="TC01",  # 默认选项
+        multi=False,
+        placeholder="Select a Tank"
+    ),
+    
+    # 图表
+    dcc.Graph(id='defect-loss-chart')
+])
+
+# 数据查询回调
+@app.callback(
+    Output('defect-loss-chart', 'figure'),
+    Input('tank-picker', 'value'),
+    Input('date-picker', 'start_date'),
+    Input('date-picker', 'end_date')
+)
+def update_chart(tank, start_date, end_date):
+    if not tank or not start_date or not end_date:
+        return go.Figure()
+
+    # 格式化日期
+    start_date_obj = pd.to_datetime(start_date)
+    end_date_obj = pd.to_datetime(end_date)
+    
+    # 构建 MDX 查询
+    query_m = f"""
+        SELECT 
+            NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
+            NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
+                          [Tank].[Tank ID].&[{tank}] * 
+                          [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
+            DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
+        ON ROWS 
+        FROM ( 
+            SELECT ({{ [Time Crate].[CR_Date].&[{start_date_obj.strftime("%Y-%m-%dT00:00:00")}] : 
+                         [Time Crate].[CR_Date].&[{end_date_obj.strftime("%Y-%m-%dT00:00:00")}] }}) 
+            ON COLUMNS 
+            FROM [PPD_Actual]
+        ) 
+        WHERE ( [Defect Tracking].[Defect Group].&[M_Melt Loss] ) 
+        CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
+    """
+
+    try:
+        # 查询数据
+        with Pyadomd(CONN_STR) as conn:
+            with conn.cursor().execute(query_m) as cur:
+                df_m = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
+                
+                # 如果没有数据，返回空图表
+                if df_m.empty:
+                    return go.Figure()
+
+                # 数据处理
+                df_m.columns = ['CR_Date', 'Tank ID', 'Defect ID', 'Defect Loss%']
+                df_m['CR_Date'] = pd.to_datetime(df_m['CR_Date'])
+                df_m.sort_values('CR_Date', inplace=True)
+
+                # 绘制图表
+                fig = go.Figure()
+
+                for defect_id in df_m['Defect ID'].unique():
+                    defect_df = df_m[df_m['Defect ID'] == defect_id]
+                    fig.add_trace(go.Bar(
+                        x=defect_df['CR_Date'],
+                        y=defect_df['Defect Loss%'],
+                        name=f"Defect {defect_id}",
+                        marker_color=None  # 可自定义颜色
+                    ))
+
+                # 更新布局
+                fig.update_layout(
+                    title=f"Defect Loss% for Tank {tank}",
+                    xaxis_title="Date",
+                    yaxis_title="Defect Loss%",
+                    barmode="stack",
+                    height=500
+                )
+                return fig
+    except Exception as e:
+        print(f"Error: {e}")
+        return go.Figure()
+
+# 运行应用
+if __name__ == '__main__':
+    app.run_server(debug=True)
