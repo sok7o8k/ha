@@ -56,22 +56,15 @@ def clean_data(df):
     
     return cleaned_df
 
-# 回调函数：执行查询并绘图
-@app.callback(
-    Output("defect-loss-graph", "figure"),
-    Input("query-button", "n_clicks"),
-    Input("tank-dropdown", "value"),
-    Input("date-picker", "start_date"),
-    Input("date-picker", "end_date"),
-)
-def update_graph(n_clicks, tank, start_date, end_date):
-    if not tank or not start_date or not end_date:
-        return px.scatter(title="Please select valid Tank ID and Date Range.")
 
-    # 格式化日期
-    start_date = pd.to_datetime(start_date)
-    end_date = pd.to_datetime(end_date)
-
+def query_data(tank, start_date, end_date):
+    """
+    从数据库查询数据
+    :param tank: 选定的 Tank ID
+    :param start_date: 起始日期
+    :param end_date: 结束日期
+    :return: 查询结果的 DataFrame
+    """
     # 动态生成 MDX 查询
     query_m = f"""
         SELECT 
@@ -91,38 +84,56 @@ def update_graph(n_clicks, tank, start_date, end_date):
         CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
     """
 
-    # 执行查询
     try:
         with Pyadomd(conn_str) as conn:
             with conn.cursor().execute(query_m) as cur:
                 # 将查询结果转换为 Pandas DataFrame
                 df = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
-                df.to_excel('dfm.xlsx', index=False)
-                df= clean_data(df)
-                print(df)
-                
-        # 如果查询为空，返回空图表
-        if df.empty:
-            return px.scatter(title="No data available for the selected Tank ID and Date Range.")
-
-        # 示例数据处理（根据实际返回的列名调整）
-        df.columns = ["Date", "Defect ID", "Defect Loss%"]  # 假设列名
-        df["Date"] = pd.to_datetime(df["Date"])
-
-        # 绘制图表
-        fig = px.line(
-            df,
-            x="Date",
-            y="Defect Loss%",
-            color="Defect ID",
-            title=f"Defect Loss% for Tank {tank} ({start_date.date()} to {end_date.date()})",
-            labels={"Defect Loss%": "Defect Loss (%)"},
-        )
-        fig.update_layout(xaxis_title="Date", yaxis_title="Defect Loss (%)")
-        return fig
-
+                return clean_data(df)
     except Exception as e:
-        return px.scatter(title=f"Error occurred: {e}")
+        print(f"Error occurred during query: {e}")
+        return pd.DataFrame()
+
+
+# 回调函数：执行查询并绘图
+@app.callback(
+    Output("defect-loss-graph", "figure"),
+    Input("query-button", "n_clicks"),
+    Input("tank-dropdown", "value"),
+    Input("date-picker", "start_date"),
+    Input("date-picker", "end_date"),
+)
+def update_graph(n_clicks, tank, start_date, end_date):
+    if not tank or not start_date or not end_date:
+        return px.scatter(title="Please select valid Tank ID and Date Range.")
+
+    # 格式化日期
+    start_date = pd.to_datetime(start_date)
+    end_date = pd.to_datetime(end_date)
+
+    # 查询数据
+    df = query_data(tank, start_date, end_date)
+
+    # 如果查询为空，返回空图表
+    if df.empty:
+        return px.scatter(title="No data available for the selected Tank ID and Date Range.")
+
+    # 示例数据处理（根据实际返回的列名调整）
+    df.columns = ["Date", "Defect ID", "Defect Loss%"]  # 假设列名
+    df["Date"] = pd.to_datetime(df["Date"])
+
+    # 绘制图表
+    fig = px.line(
+        df,
+        x="Date",
+        y="Defect Loss%",
+        color="Defect ID",
+        title=f"Defect Loss% for Tank {tank} ({start_date.date()} to {end_date.date()})",
+        labels={"Defect Loss%": "Defect Loss (%)"},
+    )
+    fig.update_layout(xaxis_title="Date", yaxis_title="Defect Loss (%)")
+    return fig
+
 
 # 运行应用
 if __name__ == "__main__":
