@@ -1,210 +1,39 @@
-from sys import path
-import plotly.graph_objects as go
-import plotly.express as px
-from dash import Dash, html, dcc, Input, Output, State, dash_table
-import dash_bootstrap_components as dbc
-from dash.exceptions import PreventUpdate
+import dash
+from dash import dcc, html, Input, Output
 import pandas as pd
-import PIconnect as PI
-from datetime import datetime, timedelta
+import plotly.express as px
+from pyadomd import Pyadomd
 
-PI.PIConfig.DEFAULT_TIMEZONE = "Asia/Taipei"
+# 配置参数
 conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
 
+# 初始化 Dash 应用
+app = dash.Dash(__name__)
 
-from pyadomd import Pyadomd
-import pandas as pd
+# 获取 Tank ID 选项（静态或从数据库加载）
+tank_ids = [f"TC{str(i).zfill(2)}" for i in range(1, 22)]  # 示例 Tank ID 列表
 
-# conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
-# query_M = "  SELECT NON EMPTY { [Measures].[M_Defect Loss%] } ON COLUMNS, NON EMPTY { ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * [Tank].[Tank ID].[Tank ID].ALLMEMBERS * [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS ) } DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME ON ROWS FROM ( SELECT ( { [Defect Tracking].[Defect Group].&[M_Melt Loss] } ) ON COLUMNS FROM ( SELECT ( { [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], [Tank].[Tank ID].&[TC03], [Tank].[Tank ID].&[TC04], [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], [Tank].[Tank ID].&[TC07], [Tank].[Tank ID].&[TC08], [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], [Tank].[Tank ID].&[TC11], [Tank].[Tank ID].&[TC12], [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], [Tank].[Tank ID].&[TC15], [Tank].[Tank ID].&[TC16], [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], [Tank].[Tank ID].&[TC19], [Tank].[Tank ID].&[TC20], [Tank].[Tank ID].&[TC21] } ) ON COLUMNS FROM ( SELECT ( { [Time Crate].[CR_Year].&[2024], [Time Crate].[CR_Year].&[2023] } ) ON COLUMNS FROM [PPD_Actual]))) WHERE ( [Time Crate].[CR_Year].CurrentMember, [Defect Tracking].[Defect Group].&[M_Melt Loss] ) CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS"
-# query_F = " SELECT NON EMPTY { [Measures].[F_Defect Loss%] } ON COLUMNS, NON EMPTY { ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * [Tank].[Tank ID].[Tank ID].ALLMEMBERS * [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS ) } DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME ON ROWS FROM ( SELECT ( { [Defect Tracking].[Defect ID].&[165], [Defect Tracking].[Defect ID].&[1028], [Defect Tracking].[Defect ID].&[311], [Defect Tracking].[Defect ID].&[252], [Defect Tracking].[Defect ID].&[407], [Defect Tracking].[Defect ID].&[171], [Defect Tracking].[Defect ID].&[838], [Defect Tracking].[Defect ID].&[169], [Defect Tracking].[Defect ID].&[836], [Defect Tracking].[Defect ID].&[167], [Defect Tracking].[Defect ID].&[834], [Defect Tracking].[Defect ID].&[170], [Defect Tracking].[Defect ID].&[837], [Defect Tracking].[Defect ID].&[168], [Defect Tracking].[Defect ID].&[835] } ) ON COLUMNS FROM ( SELECT ( { [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], [Tank].[Tank ID].&[TC03], [Tank].[Tank ID].&[TC04], [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], [Tank].[Tank ID].&[TC07], [Tank].[Tank ID].&[TC08], [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], [Tank].[Tank ID].&[TC11], [Tank].[Tank ID].&[TC12], [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], [Tank].[Tank ID].&[TC15], [Tank].[Tank ID].&[TC16], [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], [Tank].[Tank ID].&[TC19], [Tank].[Tank ID].&[TC20] } ) ON COLUMNS FROM ( SELECT ( { [Time Crate].[CR_Year].&[2024], [Time Crate].[CR_Year].&[2023] } ) ON COLUMNS FROM [PPD_Actual]))) WHERE ( [Time Crate].[CR_Year].CurrentMember ) CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS"
-
-
-# with Pyadomd(conn_str) as conn:
-#     with conn.cursor().execute(query_M) as cur:
-#         df_M = pd.DataFrame(cur.fetchone(), columns=[i.name for i in cur.description])
-#         df_M.to_excel('dfm.xlsx', index=False)
-#     with conn.cursor().execute(query_F) as cur:
-#         df_F = pd.DataFrame(cur.fetchone(), columns=[i.name for i in cur.description])
-
-
-# # Clean this table!
-# df_cleaned_M = df_M.loc[
-#     :, [c for c in df_M.columns if c[-20:] != "[MEMBER_UNIQUE_NAME]"]
-# ]  # 去掉"[MEMBER_UNIQUE_NAME]"的columns
-# df_cleaned_M.columns = [
-#     c[:-17] if c[-16:] == "[MEMBER_CAPTION]" else c for c in df_cleaned_M.columns
-# ]  # 去掉欄位中的"[MEMBER_CAPTION]"
-# df_cleaned_M.columns = [c.split(".")[-1][1:-1] for c in df_cleaned_M.columns]
-#     # 確保日期列是 datetime 格式
-# df_cleaned_M['CR_Date'] = pd.to_datetime(df_cleaned_M['CR_Date'])
-
-# # Clean this table!
-# df_cleaned_F = df_F.loc[
-#     :, [c for c in df_F.columns if c[-20:] != "[MEMBER_UNIQUE_NAME]"]
-# ]  # 去掉"[MEMBER_UNIQUE_NAME]"的columns
-# df_cleaned_F.columns = [
-#     c[:-17] if c[-16:] == "[MEMBER_CAPTION]" else c for c in df_cleaned_F.columns
-# ]  # 去掉欄位中的"[MEMBER_CAPTION]"
-# df_cleaned_F.columns = [c.split(".")[-1][1:-1] for c in df_cleaned_F.columns]
-#     # 確保日期列是 datetime 格式
-# df_cleaned_F['CR_Date'] = pd.to_datetime(df_cleaned_F['CR_Date'])
-
-# df_cleaned_M.to_excel('M_loss.xlsx', index=False) 
-# df_cleaned_F.to_excel('F_loss.xlsx', index=False) 
-
-import dash_core_components as dcc
-import dash_html_components as html
-from dash.dependencies import Input, Output, State
-import dash_mantine_components as dmc
-
-app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP])
-
-app.layout = dbc.Container([
-    dbc.Row([
-        dbc.Col([
-            dbc.Card([
-                dbc.CardHeader("選擇日期"),
-                dbc.CardBody([
-                    dmc.DateRangePicker(
-                        id='date-picker',
-                        minDate='2009-01-01',
-                        maxDate=(datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d'),
-                        value=[
-                            (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
-                            (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
-                        ],
-                        label="日期範圍",
-                        fullWidth=True
-                    ),
-                    dcc.RadioItems(
-                        id='date-shortcuts',
-                        options=[
-                            {'label': '-1 year', 'value': '1Y'},
-                            {'label': '-6 months', 'value': '6M'},
-                            {'label': '-1 month', 'value': '1M'},
-                            {'label': '-7 days', 'value': '7D'},
-                        ],
-                        value='1M',  
-                        labelStyle={'display': 'inline-block', 'margin-right': '10px'},
-                        className="mb-3"
-                    ),
-                ])
-            ], className="mb-3"),
-            dbc.Card([
-                dbc.CardHeader("選擇Tank"),
-                dbc.CardBody([
-                    dcc.Dropdown(
-                        id='tank-picker',
-                        options=[{'label': f'TC{str(i).zfill(2)}', 'value': f'TC{str(i).zfill(22)}'} for i in range(1,22)],
-                        value='TC01'
-                    ),
-                ]),
-            ], className="mb-3"),
-            dbc.Card([
-                dbc.CardHeader("選擇 Loss 類型"),
-                dbc.CardBody([
-                    dbc.RadioItems(
-                        id='loss-type',
-                        options=[
-                            {'label': 'Melting Loss', 'value': 'melting'},
-                            {'label': 'Finishing Loss', 'value': 'finishing'},
-                            {'label': 'Melting + Finishing loss', 'value': 'melting+finishing'}
-                        ],
-                        value='melting',  # 預設值為 melting
-                        inline=True,
-                        className="mb-3"
-                    ),
-                ]),
-            ], className="mb-3"),
-            dbc.Card([
-                dbc.CardHeader("選擇Defect"),
-                dbc.CardBody([
-                    dcc.Dropdown(
-                        id="defect-picker",
-                        multi=True,  # 支持多選
-                        options=[],  # 初始為空，通過 callback 動態更新
-                        value=[]     # 初始值為空，通過 callback 動態更新
-                    ),
-                ]),
-            ], className="mb-3"),
-        ], width=5),
-    ]),
-    dbc.Row([
-    dbc.Col([
-        dbc.Card([
-            dbc.CardHeader("選擇Pi Data取值頻率"),
-            dbc.CardBody([
-                dbc.RadioItems(
-                    options=[
-                        {"label": "Daily", "value": "d"},
-                        {"label": "Hourly", "value": "h"},
-                        {"label": "5min", "value": "5m"},
-                        {"label": "1min", "value": "1m"}
-                    ],
-                    value="d",
-                    inline=True,
-                    id="interval",
-                    className="mb-3",
-                ),
-            ]),
-        ], className="mb-3"),
-    ], width=5),
-    ]),
-    dbc.Row([
-    dbc.Col([
-        dbc.Card([
-            dbc.CardHeader("選擇PI Tags"),
-            dbc.CardBody([
-                html.Div([
-                    dcc.Dropdown(
-                        options=[],
-                        multi=True,
-                        id="tags",
-                        className="mb-3",
-                    ),
-                ]),
-            ]),
-        ], className="mb-3"),
-    ], width=5),
-    ]),
-    dbc.Row([
-    dbc.Col([
-        dbc.Card([
-            dbc.CardHeader("Pi data Y軸設定"),
-            dbc.CardBody([
-                html.Div([
-                    dcc.RadioItems(
-                        id="pi-y-axis-setting",
-                        options=[
-                            {'label': 'Single', 'value': 'single'},
-                            {'label': 'Multiple', 'value': 'multiple'},
-                            {'label': 'Autoscale', 'value': 'autoscale'}
-                        ],
-                        value='multiple',  # 預設為 multiple 模式
-                        labelStyle={'display': 'inline-block', 'margin-right': '10px'},
-                        style={'margin-bottom': '10px'}
-                    ),
-                ]),
-            ]),
-        ], className="mb-3"),
-    ], width=5),
-    ]),
-        dbc.Row([
-        dbc.Col([
-            dbc.Card([
-                dbc.CardBody([
-                    dcc.Store(id='filtered-data-melting'),  # 用於緩存 Melting Loss 資料
-                    dcc.Store(id='filtered-data-finishing'),  # 用於緩存 Finishing Loss 資料
-                    dcc.Graph(
-                        id="combined-graph",
-                        style={"height": "500px"},
-                    ),
-                ]),
-            ], className="mb-3"),
-        ], width=11),
-    ]),
+# 布局
+app.layout = html.Div([
+    html.H1("Defect Loss Analysis"),
+    html.Label("Select Tank ID:"),
+    dcc.Dropdown(
+        id="tank-dropdown",
+        options=[{"label": tank, "value": tank} for tank in tank_ids],
+        value="TC01",
+        clearable=False,
+    ),
+    html.Label("Select Date Range:"),
+    dcc.DatePickerRange(
+        id="date-picker",
+        start_date="2024-01-01",
+        end_date="2024-12-31",
+        display_format="YYYY-MM-DD",
+    ),
+    html.Button("Query", id="query-button", n_clicks=0),
+    dcc.Graph(id="defect-loss-graph"),
 ])
+
 
 def clean_data(df):
     """
@@ -217,7 +46,7 @@ def clean_data(df):
     
     # 去除 [MEMBER_CAPTION] 後綴，並提取欄位名稱的主體部分
     cleaned_df.columns = [
-        col.split(".")[-1][1:-1] if col.endswith("[MEMBER_CAPTION]") else col
+        col.split(".")[-1][1:-1] if "[MEMBER_CAPTION]" in col else col
         for col in cleaned_df.columns
     ]
     
@@ -227,26 +56,23 @@ def clean_data(df):
     
     return cleaned_df
 
-@app.callback(
-    [Output("filtered-data-melting", "data"),
-     Output("filtered-data-finishing", "data")],
-    [Input("date-picker", "value"),
-     Input("tank-picker", "value")]
-)
-def query_data(date_range, tank):
-    if not date_range or not tank:
-        raise PreventUpdate  # 如果条件不完整，则不触发查询
 
-    
-    start_date, end_date = map(pd.to_datetime, date_range)
-
-    # 查询 Melting Loss 数据
+def query_data(tank, start_date, end_date):
+    """
+    从数据库查询数据
+    :param tank: 选定的 Tank ID
+    :param start_date: 起始日期
+    :param end_date: 结束日期
+    :return: 查询结果的 DataFrame
+    """
+    # 动态生成 MDX 查询
     query_m = f"""
-        SELECT NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
-               NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
-                             [Tank].[Tank ID].&[{tank}] *
-                             [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
-               DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
+        SELECT 
+            NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
+            NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
+                          [Tank].[Tank ID].&[{tank}] * 
+                          [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
+            DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
         ON ROWS 
         FROM ( 
             SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
@@ -259,71 +85,56 @@ def query_data(date_range, tank):
     """
 
     try:
-        # 查询 Melting Loss 数据
         with Pyadomd(conn_str) as conn:
             with conn.cursor().execute(query_m) as cur:
-                df_m = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
-                print("Melting Loss Query Results:")
-                print(df_m)
-        # 数据清理
-        df_cleaned_m = clean_data(df_m)
-
-
-        # 将数据转换为字典格式返回
-        return df_cleaned_m.to_dict("records")
-
+                # 将查询结果转换为 Pandas DataFrame
+                df = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
+                return clean_data(df)
     except Exception as e:
-        print("Error occurred during query execution:")
-        print(e)
-        return [], []
+        print(f"Error occurred during query: {e}")
+        return pd.DataFrame()
 
 
+# 回调函数：执行查询并绘图
+@app.callback(
+    Output("defect-loss-graph", "figure"),
+    Input("query-button", "n_clicks"),
+    Input("tank-dropdown", "value"),
+    Input("date-picker", "start_date"),
+    Input("date-picker", "end_date"),
+)
+def update_graph(n_clicks, tank, start_date, end_date):
+    if not tank or not start_date or not end_date:
+        return px.scatter(title="Please select valid Tank ID and Date Range.")
+
+    # 格式化日期
+    start_date = pd.to_datetime(start_date)
+    end_date = pd.to_datetime(end_date)
+
+    # 查询数据
+    df = query_data(tank, start_date, end_date)
+
+    # 如果查询为空，返回空图表
+    if df.empty:
+        return px.scatter(title="No data available for the selected Tank ID and Date Range.")
+
+    # 示例数据处理（根据实际返回的列名调整）
+    df.columns = ["Date", "Defect ID", "Defect Loss%"]  # 假设列名
+    df["Date"] = pd.to_datetime(df["Date"])
+
+    # 绘制图表
+    fig = px.line(
+        df,
+        x="Date",
+        y="Defect Loss%",
+        color="Defect ID",
+        title=f"Defect Loss% for Tank {tank} ({start_date.date()} to {end_date.date()})",
+        labels={"Defect Loss%": "Defect Loss (%)"},
+    )
+    fig.update_layout(xaxis_title="Date", yaxis_title="Defect Loss (%)")
+    return fig
 
 
-Melting Loss Query Results:
-   [Time Crate].[CR_Time YQMD].[CR_Year].[MEMBER_CAPTION]  ... [Measures].[M_Defect Loss%]
-0                                                2024      ...                5.851961e-03
-1                                                2024      ...                4.734138e-03
-2                                                2024      ...                4.459174e-03
-3                                                2024      ...                2.088921e-02
-4                                                2024      ...                1.225538e-02
-5                                                2024      ...                7.071867e-03
-6                                                2024      ...                8.605728e-03
-7                                                2024      ...                1.047293e-02
-8                                                2024      ...                9.348375e-04
-9                                                2024      ...                8.497679e-20
-10                                               2024      ...                5.421227e-03
-11                                               2024      ...                9.720820e-03
-12                                               2024      ...                6.733789e-03
-13                                               2024      ...                1.589559e-02
-14                                               2024      ...                4.675890e-03
-15                                               2024      ...                1.365360e-02
-16                                               2024      ...                3.741055e-03
-17                                               2024      ...                3.251761e-02
-18                                               2024      ...                1.103499e-02
-19                                               2024      ...                5.613266e-03
-20                                               2024      ...                5.982427e-03
-21                                               2024      ...                2.243410e-03
-22                                               2024      ...                4.855804e-03
-23                                               2024      ...                6.357401e-03
-24                                               2024      ...                8.043696e-03
-25                                               2024      ...                1.253174e-02
-26                                               2024      ...                3.926888e-03
-27                                               2024      ...                3.945510e-02
-28                                               2024      ...                1.683504e-03
-29                                               2024      ...                6.546960e-03
-30                                               2024      ...                1.365243e-02
-31                                               2024      ...                9.537627e-03
-32                                               2024      ...                1.870224e-03
-33                                               2024      ...                7.291387e-03
-34                                               2024      ...                1.796727e-03
-
-[35 rows x 13 columns]
-c:\Users\chenk23\Desktop\DT2\Project\M.py:273: UserWarning:
-
-DataFrame columns are not unique, some columns will be omitted.
-
-Melting Loss Query Results:
-Empty DataFrame
-Columns: []
-Index: []
+# 运行应用
+if __name__ == "__main__":
+    app.run_server(debug=True)
