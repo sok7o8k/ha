@@ -1,78 +1,17 @@
-import dash
-from dash import dcc, html, Input, Output
-import pandas as pd
-import plotly.express as px
-from pyadomd import Pyadomd
+def query_data(date_range, tank):
+    if not date_range or not tank:
+        raise PreventUpdate  # 如果条件不完整，则不触发查询
 
-# 配置参数
-conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
-
-# 初始化 Dash 应用
-app = dash.Dash(__name__)
-
-# 获取 Tank ID 选项（静态或从数据库加载）
-tank_ids = [f"TC{str(i).zfill(2)}" for i in range(1, 22)]  # 示例 Tank ID 列表
-
-# 布局
-app.layout = html.Div([
-    html.H1("Defect Loss Analysis"),
-    html.Label("Select Tank ID:"),
-    dcc.Dropdown(
-        id="tank-dropdown",
-        options=[{"label": tank, "value": tank} for tank in tank_ids],
-        value="TC01",
-        clearable=False,
-    ),
-    html.Label("Select Date Range:"),
-    dcc.DatePickerRange(
-        id="date-picker",
-        start_date="2024-01-01",
-        end_date="2024-12-31",
-        display_format="YYYY-MM-DD",
-    ),
-    html.Button("Query", id="query-button", n_clicks=0),
-    dcc.Graph(id="defect-loss-graph"),
-])
-
-
-def clean_data(df):
-    """
-    清理從資料庫查詢出來的 DataFrame 資料
-    :param df: 原始 DataFrame
-    :return: 清理後的 DataFrame
-    """
-    # 移除以 [MEMBER_UNIQUE_NAME] 結尾的欄位
-    cleaned_df = df.loc[:, [col for col in df.columns if not col.endswith("[MEMBER_UNIQUE_NAME]")]]
     
-    # 去除 [MEMBER_CAPTION] 後綴，並提取欄位名稱的主體部分
-    cleaned_df.columns = [
-        col.split(".")[-1][1:-1] if "[MEMBER_CAPTION]" in col else col
-        for col in cleaned_df.columns
-    ]
-    
-    # 確保日期列是 datetime 格式
-    if "CR_Date" in cleaned_df.columns:
-        cleaned_df["CR_Date"] = pd.to_datetime(cleaned_df["CR_Date"], errors="coerce")
-    
-    return cleaned_df
+    start_date, end_date = map(pd.to_datetime, date_range)
 
-
-def query_data(tank, start_date, end_date):
-    """
-    从数据库查询数据
-    :param tank: 选定的 Tank ID
-    :param start_date: 起始日期
-    :param end_date: 结束日期
-    :return: 查询结果的 DataFrame
-    """
-    # 动态生成 MDX 查询
+    # 查询 Melting Loss 数据
     query_m = f"""
-        SELECT 
-            NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
-            NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
-                          [Tank].[Tank ID].&[{tank}] * 
-                          [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
-            DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
+        SELECT NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
+               NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
+                             [Tank].[Tank ID].&[{tank}] *
+                             [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
+               DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
         ON ROWS 
         FROM ( 
             SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
@@ -85,56 +24,21 @@ def query_data(tank, start_date, end_date):
     """
 
     try:
+        # 查询 Melting Loss 数据
         with Pyadomd(conn_str) as conn:
             with conn.cursor().execute(query_m) as cur:
-                # 将查询结果转换为 Pandas DataFrame
-                df = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
-                return clean_data(df)
+                df_m = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
+                print(start_date, end_date)
+                print("Melting Loss Query Results:")
+                print(df_m)
+        # 数据清理
+        df_cleaned_m = clean_data(df_m)
+
+
+        # 将数据转换为字典格式返回
+        return df_cleaned_m.to_dict("records")
+
     except Exception as e:
-        print(f"Error occurred during query: {e}")
-        return pd.DataFrame()
-
-
-# 回调函数：执行查询并绘图
-@app.callback(
-    Output("defect-loss-graph", "figure"),
-    Input("query-button", "n_clicks"),
-    Input("tank-dropdown", "value"),
-    Input("date-picker", "start_date"),
-    Input("date-picker", "end_date"),
-)
-def update_graph(n_clicks, tank, start_date, end_date):
-    if not tank or not start_date or not end_date:
-        return px.scatter(title="Please select valid Tank ID and Date Range.")
-
-    # 格式化日期
-    start_date = pd.to_datetime(start_date)
-    end_date = pd.to_datetime(end_date)
-
-    # 查询数据
-    df = query_data(tank, start_date, end_date)
-
-    # 如果查询为空，返回空图表
-    if df.empty:
-        return px.scatter(title="No data available for the selected Tank ID and Date Range.")
-
-    # 示例数据处理（根据实际返回的列名调整）
-    df.columns = ["Date", "Defect ID", "Defect Loss%"]  # 假设列名
-    df["Date"] = pd.to_datetime(df["Date"])
-
-    # 绘制图表
-    fig = px.line(
-        df,
-        x="Date",
-        y="Defect Loss%",
-        color="Defect ID",
-        title=f"Defect Loss% for Tank {tank} ({start_date.date()} to {end_date.date()})",
-        labels={"Defect Loss%": "Defect Loss (%)"},
-    )
-    fig.update_layout(xaxis_title="Date", yaxis_title="Defect Loss (%)")
-    return fig
-
-
-# 运行应用
-if __name__ == "__main__":
-    app.run_server(debug=True)
+        print("Error occurred during query execution:")
+        print(e)
+        return [], []
