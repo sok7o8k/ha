@@ -98,7 +98,7 @@ app.layout = dbc.Container([
                 dbc.CardBody([
                     dcc.Dropdown(
                         id='tank-picker',
-                        options=[{'label': f'TC{str(i).zfill(2)}', 'value': f'TC{str(i).zfill(22)}'} for i in range(1,22)],
+                        options=[{'label': f'TC{str(i).zfill(2)}', 'value': f'TC{str(i).zfill(2)}'} for i in range(1,22)],
                         value='TC01'
                     ),
                 ]),
@@ -244,8 +244,9 @@ def query_data(date_range, tank):
 
     # 查询 Melting Loss 数据
     query_m = f"""
-        SELECT NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
-               NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
+        SELECT 
+            NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
+            NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
                              [Tank].[Tank ID].&[{tank}] *
                              [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
                DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
@@ -257,7 +258,7 @@ def query_data(date_range, tank):
             FROM [PPD_Actual]
         ) 
         WHERE ( [Defect Tracking].[Defect Group].&[M_Melt Loss] ) 
-        CELL PROPERTIES VALUE
+        CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
     """
 
     # 查询 Finishing Loss 数据
@@ -275,7 +276,7 @@ def query_data(date_range, tank):
             FROM [PPD_Actual]
         ) 
         WHERE ( [Time Crate].[CR_Date].CurrentMember ) 
-        CELL PROPERTIES VALUE
+        CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
     """
 
     try:
@@ -283,20 +284,15 @@ def query_data(date_range, tank):
         with Pyadomd(conn_str) as conn:
             with conn.cursor().execute(query_m) as cur:
                 df_m = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
-                print("Melting Loss Query Results:")
-                print(df_m)
-
         # 查询 Finishing Loss 数据
         with Pyadomd(conn_str) as conn:
             with conn.cursor().execute(query_f) as cur:
                 df_f = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
-                print("Finishing Loss Query Results:")
-                print(df_f)
-
         # 数据清理
         df_cleaned_m = clean_data(df_m)
         df_cleaned_f = clean_data(df_f)
-
+        print(df_cleaned_m)
+        print(df_cleaned_f)
         # 将数据转换为字典格式返回
         return df_cleaned_m.to_dict("records"), df_cleaned_f.to_dict("records")
 
