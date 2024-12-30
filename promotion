@@ -1,10 +1,23 @@
-# Clean this table!
-df_cleaned_M = df_M.loc[
-    :, [c for c in df_M.columns if c[-20:] != "[MEMBER_UNIQUE_NAME]"]
-]  # 去掉"[MEMBER_UNIQUE_NAME]"的columns
-df_cleaned_M.columns = [
-    c[:-17] if c[-16:] == "[MEMBER_CAPTION]" else c for c in df_cleaned_M.columns
-]  # 去掉欄位中的"[MEMBER_CAPTION]"
-df_cleaned_M.columns = [c.split(".")[-1][1:-1] for c in df_cleaned_M.columns]
-    # 確保日期列是 datetime 格式
-df_cleaned_M['CR_Date'] = pd.to_datetime(df_cleaned_M['CR_Date'])
+def clean_data(df):
+    """
+    清理 DataFrame 的欄位名稱和數據格式。
+    
+    :param df: 原始 DataFrame
+    :return: 清理後的 DataFrame
+    """
+    # 去掉 "[MEMBER_UNIQUE_NAME]" 結尾的欄位
+    df_cleaned = df.loc[:, [c for c in df.columns if not c.endswith("[MEMBER_UNIQUE_NAME]")]]
+    
+    # 去掉欄位中的 "[MEMBER_CAPTION]" 後綴
+    df_cleaned.columns = [
+        c[:-17] if c.endswith("[MEMBER_CAPTION]") else c for c in df_cleaned.columns
+    ]
+    
+    # 提取欄位名稱的主體部分
+    df_cleaned.columns = [c.split(".")[-1][1:-1] for c in df_cleaned.columns]
+    
+    # 確保日期列是 datetime 格式（如果存在 'CR_Date' 欄位）
+    if 'CR_Date' in df_cleaned.columns:
+        df_cleaned['CR_Date'] = pd.to_datetime(df_cleaned['CR_Date'], errors='coerce')
+    
+    return df_cleaned
