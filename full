@@ -232,12 +232,30 @@ def query_data(date_range, tank):
                DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
         ON ROWS 
         FROM ( 
+            SELECT (
+                {{ [Defect Tracking].[Defect ID].&[165], 
+                   [Defect Tracking].[Defect ID].&[1028], 
+                   [Defect Tracking].[Defect ID].&[311], 
+                   [Defect Tracking].[Defect ID].&[252], 
+                   [Defect Tracking].[Defect ID].&[407], 
+                   [Defect Tracking].[Defect ID].&[171], 
+                   [Defect Tracking].[Defect ID].&[838], 
+                   [Defect Tracking].[Defect ID].&[169], 
+                   [Defect Tracking].[Defect ID].&[836], 
+                   [Defect Tracking].[Defect ID].&[167], 
+                   [Defect Tracking].[Defect ID].&[834], 
+                   [Defect Tracking].[Defect ID].&[170], 
+                   [Defect Tracking].[Defect ID].&[837], 
+                   [Defect Tracking].[Defect ID].&[168], 
+                   [Defect Tracking].[Defect ID].&[835] }} 
+        ) ON COLUMNS 
+        FROM ( 
             SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
                          [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
             ON COLUMNS 
             FROM [PPD_Actual]
         ) 
-        WHERE ( [Time Crate].[CR_Date].CurrentMember ) 
+        WHERE ( [Time Crate].[CR_Date].CurrentMember ) )
         CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
     """
 
