@@ -1,5 +1,11 @@
-TypeError: '>=' not supported between instances of 'str' and 'Timestamp'
+if data_melting:
+    df_cleaned_M = pd.DataFrame(data_melting)
+    df_cleaned_M["CR_Date"] = pd.to_datetime(df_cleaned_M["CR_Date"], errors="coerce")
+else:
+    df_cleaned_M = pd.DataFrame()
 
-Traceback (most recent call last)
-File "c:\Users\chenk23\Desktop\DT2\Project\M.py", line 406, in update_combined_graph
-(df_cleaned_M["CR_Date"] >= start_date) &
+if data_finishing:
+    df_cleaned_F = pd.DataFrame(data_finishing)
+    df_cleaned_F["CR_Date"] = pd.to_datetime(df_cleaned_F["CR_Date"], errors="coerce")
+else:
+    df_cleaned_F = pd.DataFrame()
