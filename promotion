@@ -1,26 +1,60 @@
-query_F = " SELECT NON EMPTY { [Measures].[F_Defect Loss%] } ON COLUMNS, NON EMPTY { ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * [Tank].[Tank ID].[Tank ID].ALLMEMBERS * [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS ) } DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME ON ROWS FROM ( SELECT ( { [Defect Tracking].[Defect ID].&[165], [Defect Tracking].[Defect ID].&[1028], [Defect Tracking].[Defect ID].&[311], [Defect Tracking].[Defect ID].&[252], [Defect Tracking].[Defect ID].&[407], [Defect Tracking].[Defect ID].&[171], [Defect Tracking].[Defect ID].&[838], [Defect Tracking].[Defect ID].&[169], [Defect Tracking].[Defect ID].&[836], [Defect Tracking].[Defect ID].&[167], [Defect Tracking].[Defect ID].&[834], [Defect Tracking].[Defect ID].&[170], [Defect Tracking].[Defect ID].&[837], [Defect Tracking].[Defect ID].&[168], [Defect Tracking].[Defect ID].&[835] } ) ON COLUMNS FROM ( SELECT ( { [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], [Tank].[Tank ID].&[TC03], [Tank].[Tank ID].&[TC04], [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], [Tank].[Tank ID].&[TC07], [Tank].[Tank ID].&[TC08], [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], [Tank].[Tank ID].&[TC11], [Tank].[Tank ID].&[TC12], [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], [Tank].[Tank ID].&[TC15], [Tank].[Tank ID].&[TC16], [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], [Tank].[Tank ID].&[TC19], [Tank].[Tank ID].&[TC20] } ) ON COLUMNS FROM ( SELECT ( { [Time Crate].[CR_Year].&[2024] } ) ON COLUMNS FROM [PPD_Actual]))) WHERE ( [Time Crate].[CR_Year].CurrentMember ) CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS"
-
 def query_data(date_range, tank):
     if not date_range or not tank:
         raise PreventUpdate  # 如果条件不完整，则不触发查询
 
     conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
     start_date, end_date = map(pd.to_datetime, date_range)
-    # 查询 Finishing Loss 数据
 
+    # 调整 query_f 查询语句
     query_f = f"""
         SELECT NON EMPTY {{ [Measures].[F_Defect Loss%] }} ON COLUMNS, 
                NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
                              [Tank].[Tank ID].&[{tank}] *
-                             [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
+                             [Defect Tracking].[Defect ID].ALLMEMBERS) }} 
                DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
         ON ROWS 
         FROM ( 
-            SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
-                         [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
-            ON COLUMNS 
-            FROM [PPD_Actual]
-        ) 
+            SELECT (
+                {{ [Defect Tracking].[Defect ID].&[165], 
+                   [Defect Tracking].[Defect ID].&[1028], 
+                   [Defect Tracking].[Defect ID].&[311], 
+                   [Defect Tracking].[Defect ID].&[252], 
+                   [Defect Tracking].[Defect ID].&[407], 
+                   [Defect Tracking].[Defect ID].&[171], 
+                   [Defect Tracking].[Defect ID].&[838], 
+                   [Defect Tracking].[Defect ID].&[169], 
+                   [Defect Tracking].[Defect ID].&[836], 
+                   [Defect Tracking].[Defect ID].&[167], 
+                   [Defect Tracking].[Defect ID].&[834], 
+                   [Defect Tracking].[Defect ID].&[170], 
+                   [Defect Tracking].[Defect ID].&[837], 
+                   [Defect Tracking].[Defect ID].&[168], 
+                   [Defect Tracking].[Defect ID].&[835] }} 
+            ) ON COLUMNS 
+            FROM (
+                SELECT ({{ [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], 
+                           [Tank].[Tank ID].&[TC03], [Tank].[Tank ID].&[TC04], 
+                           [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], 
+                           [Tank].[Tank ID].&[TC07], [Tank].[Tank ID].&[TC08], 
+                           [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], 
+                           [Tank].[Tank ID].&[TC11], [Tank].[Tank ID].&[TC12], 
+                           [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], 
+                           [Tank].[Tank ID].&[TC15], [Tank].[Tank ID].&[TC16], 
+                           [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], 
+                           [Tank].[Tank ID].&[TC19], [Tank].[Tank ID].&[TC20] }} 
+                ) ON COLUMNS 
+                FROM (
+                    SELECT (
+                        {{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
+                           [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }} 
+                    ) ON COLUMNS 
+                    FROM [PPD_Actual]
+                )
+            )
+        )
         WHERE ( [Time Crate].[CR_Date].CurrentMember ) 
         CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
     """
+
+    # 返回构造的查询
+    return query_f
