@@ -290,13 +290,12 @@ def query_data(date_range, tank):
             with conn.cursor().execute(query_f) as cur:
                 df_f = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
         # 数据清理
-        df_cleaned_m = clean_data(df_m)
-        df_cleaned_f = clean_data(df_f)
-        print(df_cleaned_m)
-        print(df_cleaned_f)
+        df_cleaned_M = clean_data(df_m)
+        df_cleaned_F = clean_data(df_f)
+        print(df_cleaned_M.to_dict("records"))
         # 将数据转换为字典格式返回
-        return df_cleaned_m.to_dict("records"), df_cleaned_f.to_dict("records")
-
+        return df_cleaned_M.to_dict("records"), df_cleaned_F.to_dict("records")
+        
     except Exception as e:
         print("Error occurred during query execution:")
         print(e)
@@ -340,6 +339,8 @@ def update_defect_picker(loss_type, tank, date_range, data_melting, data_finishi
     # 將輸入的字典格式數據轉換為 DataFrame
     df_cleaned_M = pd.DataFrame(data_melting) if data_melting else pd.DataFrame()
     df_cleaned_F = pd.DataFrame(data_finishing) if data_finishing else pd.DataFrame()
+    print(data_melting)
+    print(data_finishing)
 
     # 根據 loss_type 合併數據
     if loss_type == 'melting+finishing':
