@@ -16,45 +16,6 @@ path.append(
 
 from pyadomd import Pyadomd
 import pandas as pd
-
-# conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
-# query_M = "  SELECT NON EMPTY { [Measures].[M_Defect Loss%] } ON COLUMNS, NON EMPTY { ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * [Tank].[Tank ID].[Tank ID].ALLMEMBERS * [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS ) } DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME ON ROWS FROM ( SELECT ( { [Defect Tracking].[Defect Group].&[M_Melt Loss] } ) ON COLUMNS FROM ( SELECT ( { [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], [Tank].[Tank ID].&[TC03], [Tank].[Tank ID].&[TC04], [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], [Tank].[Tank ID].&[TC07], [Tank].[Tank ID].&[TC08], [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], [Tank].[Tank ID].&[TC11], [Tank].[Tank ID].&[TC12], [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], [Tank].[Tank ID].&[TC15], [Tank].[Tank ID].&[TC16], [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], [Tank].[Tank ID].&[TC19], [Tank].[Tank ID].&[TC20], [Tank].[Tank ID].&[TC21] } ) ON COLUMNS FROM ( SELECT ( { [Time Crate].[CR_Year].&[2024], [Time Crate].[CR_Year].&[2023] } ) ON COLUMNS FROM [PPD_Actual]))) WHERE ( [Time Crate].[CR_Year].CurrentMember, [Defect Tracking].[Defect Group].&[M_Melt Loss] ) CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS"
-# query_F = " SELECT NON EMPTY { [Measures].[F_Defect Loss%] } ON COLUMNS, NON EMPTY { ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * [Tank].[Tank ID].[Tank ID].ALLMEMBERS * [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS ) } DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME ON ROWS FROM ( SELECT ( { [Defect Tracking].[Defect ID].&[165], [Defect Tracking].[Defect ID].&[1028], [Defect Tracking].[Defect ID].&[311], [Defect Tracking].[Defect ID].&[252], [Defect Tracking].[Defect ID].&[407], [Defect Tracking].[Defect ID].&[171], [Defect Tracking].[Defect ID].&[838], [Defect Tracking].[Defect ID].&[169], [Defect Tracking].[Defect ID].&[836], [Defect Tracking].[Defect ID].&[167], [Defect Tracking].[Defect ID].&[834], [Defect Tracking].[Defect ID].&[170], [Defect Tracking].[Defect ID].&[837], [Defect Tracking].[Defect ID].&[168], [Defect Tracking].[Defect ID].&[835] } ) ON COLUMNS FROM ( SELECT ( { [Tank].[Tank ID].&[TC01], [Tank].[Tank ID].&[TC02], [Tank].[Tank ID].&[TC03], [Tank].[Tank ID].&[TC04], [Tank].[Tank ID].&[TC05], [Tank].[Tank ID].&[TC06], [Tank].[Tank ID].&[TC07], [Tank].[Tank ID].&[TC08], [Tank].[Tank ID].&[TC09], [Tank].[Tank ID].&[TC10], [Tank].[Tank ID].&[TC11], [Tank].[Tank ID].&[TC12], [Tank].[Tank ID].&[TC13], [Tank].[Tank ID].&[TC14], [Tank].[Tank ID].&[TC15], [Tank].[Tank ID].&[TC16], [Tank].[Tank ID].&[TC17], [Tank].[Tank ID].&[TC18], [Tank].[Tank ID].&[TC19], [Tank].[Tank ID].&[TC20] } ) ON COLUMNS FROM ( SELECT ( { [Time Crate].[CR_Year].&[2024], [Time Crate].[CR_Year].&[2023] } ) ON COLUMNS FROM [PPD_Actual]))) WHERE ( [Time Crate].[CR_Year].CurrentMember ) CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS"
-
-
-# with Pyadomd(conn_str) as conn:
-#     with conn.cursor().execute(query_M) as cur:
-#         df_M = pd.DataFrame(cur.fetchone(), columns=[i.name for i in cur.description])
-#         df_M.to_excel('dfm.xlsx', index=False)
-#     with conn.cursor().execute(query_F) as cur:
-#         df_F = pd.DataFrame(cur.fetchone(), columns=[i.name for i in cur.description])
-
-
-# # Clean this table!
-# df_cleaned_M = df_M.loc[
-#     :, [c for c in df_M.columns if c[-20:] != "[MEMBER_UNIQUE_NAME]"]
-# ]  # 去掉"[MEMBER_UNIQUE_NAME]"的columns
-# df_cleaned_M.columns = [
-#     c[:-17] if c[-16:] == "[MEMBER_CAPTION]" else c for c in df_cleaned_M.columns
-# ]  # 去掉欄位中的"[MEMBER_CAPTION]"
-# df_cleaned_M.columns = [c.split(".")[-1][1:-1] for c in df_cleaned_M.columns]
-#     # 確保日期列是 datetime 格式
-# df_cleaned_M['CR_Date'] = pd.to_datetime(df_cleaned_M['CR_Date'])
-
-# # Clean this table!
-# df_cleaned_F = df_F.loc[
-#     :, [c for c in df_F.columns if c[-20:] != "[MEMBER_UNIQUE_NAME]"]
-# ]  # 去掉"[MEMBER_UNIQUE_NAME]"的columns
-# df_cleaned_F.columns = [
-#     c[:-17] if c[-16:] == "[MEMBER_CAPTION]" else c for c in df_cleaned_F.columns
-# ]  # 去掉欄位中的"[MEMBER_CAPTION]"
-# df_cleaned_F.columns = [c.split(".")[-1][1:-1] for c in df_cleaned_F.columns]
-#     # 確保日期列是 datetime 格式
-# df_cleaned_F['CR_Date'] = pd.to_datetime(df_cleaned_F['CR_Date'])
-
-# df_cleaned_M.to_excel('M_loss.xlsx', index=False) 
-# df_cleaned_F.to_excel('F_loss.xlsx', index=False) 
-
 import dash_core_components as dcc
 import dash_html_components as html
 from dash.dependencies import Input, Output, State
@@ -99,7 +60,7 @@ app.layout = dbc.Container([
                     dcc.Dropdown(
                         id='tank-picker',
                         options=[{'label': f'TC{str(i).zfill(2)}', 'value': f'TC{str(i).zfill(2)}'} for i in range(1,22)],
-                        value='TC01'
+                        value=[]
                     ),
                 ]),
             ], className="mb-3"),
@@ -113,7 +74,7 @@ app.layout = dbc.Container([
                             {'label': 'Finishing Loss', 'value': 'finishing'},
                             {'label': 'Melting + Finishing loss', 'value': 'melting+finishing'}
                         ],
-                        value='melting',  # 預設值為 melting
+                        value=[],  # 預設值為 melting
                         inline=True,
                         className="mb-3"
                     ),
@@ -196,8 +157,8 @@ app.layout = dbc.Container([
         dbc.Col([
             dbc.Card([
                 dbc.CardBody([
-                    dcc.Store(id='filtered-data-melting'),  # 用於緩存 Melting Loss 資料
-                    dcc.Store(id='filtered-data-finishing'),  # 用於緩存 Finishing Loss 資料
+                    dcc.Store(id='filtered-data-melting', data=[]),  # 用於緩存 Melting Loss 資料
+                    dcc.Store(id='filtered-data-finishing', data=[]),  # 用於緩存 Finishing Loss 資料
                     dcc.Graph(
                         id="combined-graph",
                         style={"height": "500px"},
@@ -292,7 +253,6 @@ def query_data(date_range, tank):
         # 数据清理
         df_cleaned_M = clean_data(df_m)
         df_cleaned_F = clean_data(df_f)
-        print(df_cleaned_M.to_dict("records"))
         # 将数据转换为字典格式返回
         return df_cleaned_M.to_dict("records"), df_cleaned_F.to_dict("records")
         
@@ -337,10 +297,20 @@ def update_defect_picker(loss_type, tank, date_range, data_melting, data_finishi
     start_date, end_date = map(pd.to_datetime, date_range)
 
     # 將輸入的字典格式數據轉換為 DataFrame
-    df_cleaned_M = pd.DataFrame(data_melting) if data_melting else pd.DataFrame()
-    df_cleaned_F = pd.DataFrame(data_finishing) if data_finishing else pd.DataFrame()
-    print(data_melting)
-    print(data_finishing)
+    if data_melting:
+        df_cleaned_M = pd.DataFrame(data_melting)
+        df_cleaned_M["CR_Date"] = pd.to_datetime(df_cleaned_M["CR_Date"], errors="coerce")
+    else:
+        df_cleaned_M = pd.DataFrame()
+
+    if data_finishing:
+        df_cleaned_F = pd.DataFrame(data_finishing)
+        df_cleaned_F["CR_Date"] = pd.to_datetime(df_cleaned_F["CR_Date"], errors="coerce")
+    else:
+        df_cleaned_F = pd.DataFrame()
+    print(df_cleaned_M)
+    print(df_cleaned_F)
+    df_cleaned_M.to_excel('dfm.xlsx', index = False)
 
     # 根據 loss_type 合併數據
     if loss_type == 'melting+finishing':
@@ -373,7 +343,7 @@ def update_defect_picker(loss_type, tank, date_range, data_melting, data_finishi
     # 獲取唯一的 Defect ID 選項
     all_defects = filtered_df["Defect ID"].dropna().unique()
     defect_options = [{"label": defect, "value": defect} for defect in all_defects]
-
+    print('defect_options:',filtered_df)
     # 默認選中所有 Defect
     default_values = list(all_defects)
 
@@ -435,8 +405,17 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, p
     start_date, end_date = map(pd.to_datetime, date_range)
 
     # 將輸入的字典格式數據轉換為 DataFrame
-    df_cleaned_M = pd.DataFrame(data_melting) if data_melting else pd.DataFrame()
-    df_cleaned_F = pd.DataFrame(data_finishing) if data_finishing else pd.DataFrame()
+    if data_melting:
+        df_cleaned_M = pd.DataFrame(data_melting)
+        df_cleaned_M["CR_Date"] = pd.to_datetime(df_cleaned_M["CR_Date"], errors="coerce")
+    else:
+        df_cleaned_M = pd.DataFrame()
+
+    if data_finishing:
+        df_cleaned_F = pd.DataFrame(data_finishing)
+        df_cleaned_F["CR_Date"] = pd.to_datetime(df_cleaned_F["CR_Date"], errors="coerce")
+    else:
+        df_cleaned_F = pd.DataFrame()
     
     # 根據 loss_type 合併數據
     if loss_type in ['melting', 'finishing', 'melting+finishing']:
