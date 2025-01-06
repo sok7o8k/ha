@@ -10,6 +10,10 @@ from datetime import datetime, timedelta
 
 PI.PIConfig.DEFAULT_TIMEZONE = "Asia/Taipei"
 
+path.append(
+    "C:\\Users\\chenk23\\Desktop\\DT2\\20240507\\03_Databases"
+)  # added to the path BEFORE importing the pyadomd package
+
 from pyadomd import Pyadomd
 import pandas as pd
 import dash_core_components as dcc
@@ -173,6 +177,14 @@ app.layout = dbc.Container([
         ], width=11),
     ]),
 ])
+
+#動態更新當前日期
+@app.callback(
+    Output('date-picker', 'maxDate'),
+    Input('date-picker', 'id')
+)
+def update_max_date(_):
+    return (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
 
 def clean_data(df):
     """
