@@ -1,7 +1,7 @@
 from sys import path
 import plotly.graph_objects as go
 import plotly.express as px
-from dash import Dash, html, dcc, Input, Output, State, dash_table
+from dash import Dash, html, dcc, Input, Output
 import dash_bootstrap_components as dbc
 from dash.exceptions import PreventUpdate
 import pandas as pd
@@ -10,11 +10,15 @@ from datetime import datetime, timedelta
 
 PI.PIConfig.DEFAULT_TIMEZONE = "Asia/Taipei"
 
+path.append(
+    "C:\\Users\\chenk23\\Desktop\\DT2\\20240507\\03_Databases"
+)  # added to the path BEFORE importing the pyadomd package
+
 from pyadomd import Pyadomd
 import pandas as pd
 import dash_core_components as dcc
 import dash_html_components as html
-from dash.dependencies import Input, Output, State
+from dash.dependencies import Input, Output
 import dash_mantine_components as dmc
 
 app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP])
@@ -56,7 +60,7 @@ app.layout = dbc.Container([
                     dcc.Dropdown(
                         id='tank-picker',
                         options=[{'label': f'TC{str(i).zfill(2)}', 'value': f'TC{str(i).zfill(2)}'} for i in range(1,22)],
-                        value=[]
+                        value='TC01'
                     ),
                 ]),
             ], className="mb-3"),
@@ -70,7 +74,7 @@ app.layout = dbc.Container([
                             {'label': 'Finishing Loss', 'value': 'finishing'},
                             {'label': 'Melting + Finishing loss', 'value': 'melting+finishing'}
                         ],
-                        value=[],  # 預設值為 melting
+                        value='melting',  # 預設值為 melting
                         inline=True,
                         className="mb-3"
                     ),
@@ -300,9 +304,9 @@ def update_datepicker(selected_period):
      Output("defect-picker", "value")],  # 更新 defect-picker 的預設值
     [Input("loss-type", "value"),         # 當 loss-type 改變時觸發
      Input("tank-picker", "value"),       # 當 tank 改變時也觸發
-     Input("date-picker", "value")],      # 當日期範圍改變時觸發
-    [State("filtered-data-melting", "data"),  # 輸入 melting 數據
-     State("filtered-data-finishing", "data")]  # 輸入 finishing 數據
+     Input("date-picker", "value"),      # 當日期範圍改變時觸發
+     Input("filtered-data-melting", "data"),  # 輸入 melting 數據
+     Input("filtered-data-finishing", "data")]  # 輸入 finishing 數據
 )
 def update_defect_picker(loss_type, tank, date_range, data_melting, data_finishing):
     if not date_range or len(date_range) != 2 or not tank:
@@ -405,9 +409,9 @@ defect_colors = {
      Input("tank-picker", "value"),
      Input("loss-type", "value"),
      Input("defect-picker", "value"),
-     Input("pi-y-axis-setting", "value")],  # 新增 Y 軸模式輸入
-    [State("filtered-data-melting", "data"),  # 輸入 Melting 數據
-     State("filtered-data-finishing", "data")]  # 輸入 Finishing 數據
+     Input("pi-y-axis-setting", "value"),  # 新增 Y 軸模式輸入
+     Input("filtered-data-melting", "data"),  # 輸入 Melting 數據
+     Input("filtered-data-finishing", "data")]  # 輸入 Finishing 數據
 )
 def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, pi_y_axis_mode, 
                           data_melting, data_finishing):
