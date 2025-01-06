@@ -323,9 +323,10 @@ def update_defect_picker(loss_type, tank, date_range, data_melting, data_finishi
         df_cleaned_F["CR_Date"] = pd.to_datetime(df_cleaned_F["CR_Date"], errors="coerce")
     else:
         df_cleaned_F = pd.DataFrame()
-    print(df_cleaned_M)
-    print(df_cleaned_F)
-    df_cleaned_M.to_excel('dfm.xlsx', index = False)
+
+    # 檢查資料是否存在
+    if df_cleaned_M.empty and df_cleaned_F.empty:
+        return [], []  # 如果沒有資料，返回空選項和清空選擇
 
     # 根據 loss_type 合併數據
     if loss_type == 'melting+finishing':
@@ -358,7 +359,6 @@ def update_defect_picker(loss_type, tank, date_range, data_melting, data_finishi
     # 獲取唯一的 Defect ID 選項
     all_defects = filtered_df["Defect ID"].dropna().unique()
     defect_options = [{"label": defect, "value": defect} for defect in all_defects]
-    print('defect_options:',filtered_df)
     # 默認選中所有 Defect
     default_values = list(all_defects)
 
@@ -416,6 +416,16 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, p
 
     if not date_range or len(date_range) != 2 or not tank:
         raise PreventUpdate  # 如果輸入條件不足，則不更新圖表
+        # 檢查資料是否存在
+
+    if not data_melting and not data_finishing:
+        fig.add_annotation(
+            text="No data available for the selected period (Cold Repair)",
+            xref="paper", yref="paper",
+            x=0.5, y=0.5, showarrow=False,
+            font=dict(size=20)
+        )
+        return fig
 
     start_date, end_date = map(pd.to_datetime, date_range)
 
@@ -534,8 +544,6 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, p
 
                 # 合併所有 PI tags 數據
                 df = pd.concat(series, axis=1)
-                print(df)
-                df.to_excel('PI.xlsx', index=False)
 
                 # 設定顏色循環，避免顏色數量限制
                 color_idx = 0
