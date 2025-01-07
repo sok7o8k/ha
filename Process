@@ -10,9 +10,6 @@ from datetime import datetime, timedelta
 
 PI.PIConfig.DEFAULT_TIMEZONE = "Asia/Taipei"
 
-path.append(
-    "C:\\Users\\chenk23\\Desktop\\DT2\\20240507\\03_Databases"
-)  # added to the path BEFORE importing the pyadomd package
 
 from pyadomd import Pyadomd
 import pandas as pd
