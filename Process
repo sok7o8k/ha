@@ -137,7 +137,7 @@ app.layout = dbc.Container([
     dbc.Row([
     dbc.Col([
         dbc.Card([
-            dbc.CardHeader("Pi data Y軸設定"),
+            dbc.CardHeader("Pi Data Y軸設定"),
             dbc.CardBody([
                 html.Div([
                     dcc.RadioItems(
