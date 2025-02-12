@@ -224,7 +224,8 @@ def layout(dashapp):
                             {"label": "Daily", "value": "d"},
                             {"label": "Hourly", "value": "h"},
                             {"label": "5min", "value": "5m"},
-                            {"label": "1min", "value": "1m"}
+                            {"label": "1min", "value": "1m"},
+                            {"label": "5s", "value": "5s"}
                         ],
                         value="d",
                         labelStyle={'display': 'inline-block', 'margin-right': '10px'},
@@ -317,7 +318,6 @@ def query_data(date_range, tank):
     if not date_range or not tank:
         raise PreventUpdate  # 如果条件不完整，则不触发查询
 
-    conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
     start_date, end_date = map(pd.to_datetime, date_range)
 
     # 查询 Melting Loss 数据
@@ -561,7 +561,7 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, p
                 series = []
                 for p in points:
                     # 使用選擇的頻率取樣數據
-                    sample_interval_dic = {'d': '30m', 'h': '30m', '5m': '5m', '1m': '1m'}
+                    sample_interval_dic = {'d': '30m', 'h': '30m', '5m': '5m', '1m': '1m' , '5s': '5s'}
                     data = p.interpolated_values(
                         start_time=start_date,
                         end_time=end_date,
@@ -576,7 +576,7 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, p
                     interpolated_data.set_index('Timestamp', inplace=True)
 
                     # 根據使用者選擇的 interval 將數據重新取樣
-                    resample_interval_dic = {'d': '1D', 'h': '1h', '5m': '5min', '1m': '1min'}
+                    resample_interval_dic = {'d': '1D', 'h': '1h', '5m': '5min', '1m': '1min', '5s': '5s'}
                     resampled_data = interpolated_data.resample(resample_interval_dic[interval]).mean()
 
                     series.append(resampled_data)  # 將每個 Tag 的數據加入 series 清單
