@@ -356,19 +356,80 @@ app.layout = layout(0)
 def update_max_date(_):
     return (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
 
-@app.callback(
+@app.callback( #此PPD query data為即時更新gen size, thickness, Finishing line選項用(只有finishing data需要)
+    Output("gen-picker", "options"),  # 更新 gen size 的選項
+    Output("thickness-picker", "options"),  # 更新 thickness 的選項
+    Output("line-picker", "options"),  # 更新 Finishing line 的選項
+    Output("gen-picker", "value"),  # 更新 gen size 的預設值
+    Output("thickness-picker", "value"),  # 更新 thickness 的預設值
+    Output("line-picker", "value"),  # 更新 Finishing line 的預設值
+    Input("date-picker", "value"),
+    Input("tank-picker", "value")
+)
+def query_data(date_range, tank):
+    if not date_range or not tank:
+        raise PreventUpdate
+    
+    start_date, end_date = map(pd.to_datetime, date_range)
+
+    query_f = f"""
+    SELECT NON EMPTY {{ [Measures].[F_Defect Loss%] }} ON COLUMNS, 
+        NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
+                        [Tank].[Tank ID].&[{tank}] *
+                        [FG Product].[FG_Gen].[FG_Gen].ALLMEMBERS * 
+                        [FG Product].[FG_Thickness].[FG_Thickness].ALLMEMBERS * 
+                        [Finishing Line].[Line ID].[Line ID].ALLMEMBERS) }} 
+        DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
+    ON ROWS 
+    FROM ( 
+        SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
+                    [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
+        ON COLUMNS 
+        FROM [PPD_Actual]
+    ) 
+    WHERE ( [Time Crate].[CR_Date].CurrentMember ) 
+    CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
+    """
+
+    try:
+        # 數據清理
+        df_cleaned_F = clean_data(get_PPD(query_f))
+        df_cleaned_F.to_excel('loss_F.xlsx', index=False)
+        # 獲取唯一的 Defect ID 選項
+        all_gen = df_cleaned_F["FG_Gen"].dropna().unique()
+        all_thickness = df_cleaned_F["FG_Thickness"].dropna().unique()
+        all_line = df_cleaned_F["Line ID"].dropna().unique()
+        gen_options = [{"label": gen, "value": gen} for gen in all_gen]
+        thickness_options = [{"label": thickness, "value": thickness} for thickness in all_thickness]
+        line_options = [{"label": line, "value": line} for line in all_line]
+        # 默認選中所有 Defect
+        gen_default = list(all_gen)
+        thickness_default = list(all_thickness)
+        line_default = list(all_line)
+
+        return gen_options, thickness_options, line_options, gen_default, thickness_default, line_default
+
+        
+    except Exception as e:
+        print("Error occurred during query execution:")
+        print(e)
+        return [], []
+    
+#####
+
+@app.callback(  #此PPD query data為最後performance data畫圖用
     Output("filtered-data-melting", "data"),
     Output("filtered-data-finishing", "data"),
     Input("date-picker", "value"),
     Input("tank-picker", "value")
 )
-def query_data(date_range, tank): #此為產生performance data用
+def query_data(date_range, tank): 
     if not date_range or not tank:
-        raise PreventUpdate  # 如果条件不完整，则不触发查询
+        raise PreventUpdate  
 
     start_date, end_date = map(pd.to_datetime, date_range)
 
-    # 查询 Melting Loss 数据
+    # 查詢 Melting Loss 
     query_m = f"""
         SELECT 
             NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
@@ -387,7 +448,7 @@ def query_data(date_range, tank): #此為產生performance data用
         CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
     """
 
-    # 查询 Finishing Loss 数据
+    # 查詢 Finishing Loss
     query_f = f"""
         SELECT NON EMPTY {{ [Measures].[F_Defect Loss%] }} ON COLUMNS, 
             NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
@@ -424,11 +485,10 @@ def query_data(date_range, tank): #此為產生performance data用
     """
 
     try:
-        # 数据清理
+        # 數據清理
         df_cleaned_M = clean_data(get_PPD(query_m))
         df_cleaned_F = clean_data(get_PPD(query_f))
-        df_cleaned_F.to_excel('loss_F.xlsx', index=False)
-        # 将数据转换为字典格式返回
+        # 將數據轉成字典返回
         return df_cleaned_M.to_dict("records"), df_cleaned_F.to_dict("records")
         
     except Exception as e:
