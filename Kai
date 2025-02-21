@@ -356,7 +356,7 @@ app.layout = layout(0)
 def update_max_date(_):
     return (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
 
-@app.callback( #此PPD query data為即時更新gen size, thickness, Finishing line選項用(只有finishing data需要)
+@app.callback( #此PPD query data為即時更新gen size, thickness, Finishing line的選項用(只有finishing data需要)
     Output("gen-picker", "options"),  # 更新 gen size 的選項
     Output("thickness-picker", "options"),  # 更新 thickness 的選項
     Output("line-picker", "options"),  # 更新 Finishing line 的選項
@@ -385,8 +385,14 @@ def query_data(date_range, tank):
         SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
                     [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
         ON COLUMNS 
+     FROM ( 
+        SELECT ({{ [Production Type].[Production Type Hierarchy].[Lot Type／Scheduled].&[F-Normal], 
+                    [Production Type].[Production Type Hierarchy].[SubType].&[F-Div], 
+                    [Production Type].[Production Type Hierarchy].[SubType].&[F-Engineering], 
+                    [Production Type].[Production Type Hierarchy].[SubType].&[F-Plant] }}) 
+                    ON COLUMNS 
         FROM [PPD_Actual]
-    ) 
+    ) )
     WHERE ( [Time Crate].[CR_Date].CurrentMember ) 
     CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
     """
@@ -478,8 +484,14 @@ def query_data(date_range, tank):
             SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
                         [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
             ON COLUMNS 
+        FROM ( 
+            SELECT ({{ [Production Type].[Production Type Hierarchy].[Lot Type／Scheduled].&[F-Normal], 
+                        [Production Type].[Production Type Hierarchy].[SubType].&[F-Div], 
+                        [Production Type].[Production Type Hierarchy].[SubType].&[F-Engineering], 
+                        [Production Type].[Production Type Hierarchy].[SubType].&[F-Plant] }}) 
+                        ON COLUMNS 
             FROM [PPD_Actual]
-        ) 
+        ) )
         WHERE ( [Time Crate].[CR_Date].CurrentMember ) )
         CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
     """
