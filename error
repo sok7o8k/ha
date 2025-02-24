@@ -1,3 +1,5 @@
+Microsoft.AnalysisServices.AdomdClient.AdomdErrorResponseException: Query (40, 21) Parser: The syntax for '[PPD_Actual]' is incorrect. 
+
 query_f = f"""
     SELECT NON EMPTY {{ [Measures].[F_Defect Loss%] }} ON COLUMNS, 
         NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
