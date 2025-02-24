@@ -108,7 +108,7 @@ def filter_df(df, start_date, end_date, tank):
     return df[
         (df["CR_Date"] >= start_date) &
         (df["CR_Date"] <= end_date) &
-        (df["Tank ID"] == tank)
+        (df["Source Tank ID"] == tank)
     ]
 
 def layout(dashapp):
@@ -375,11 +375,11 @@ def query_data(date_range, tank):
     query_f = f"""
     SELECT NON EMPTY {{ [Measures].[F_Defect Loss%] }} ON COLUMNS, 
         NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
-                        [Tank].[Tank ID].&[{tank}] *
+                        [Finishing Source Tank].[Source Tank ID].&[{tank}] *
                         [FG Product].[FG_Gen].[FG_Gen].ALLMEMBERS * 
                         [FG Product].[FG_Thickness].[FG_Thickness].ALLMEMBERS * 
                         [Finishing Line].[Line ID].[Line ID].ALLMEMBERS) }} 
-        DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
+        DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME
     ON ROWS 
     FROM ( 
         SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
@@ -427,9 +427,12 @@ def query_data(date_range, tank):
     Output("filtered-data-melting", "data"),
     Output("filtered-data-finishing", "data"),
     Input("date-picker", "value"),
-    Input("tank-picker", "value")
+    Input("tank-picker", "value"),
+    Input("gen-picker", "value"),
+    Input("thickness-picker", "value"),
+    Input("line-picker", "value"),
 )
-def query_data(date_range, tank): 
+def query_data(date_range, tank, gen, thickness, line): 
     if not date_range or not tank:
         raise PreventUpdate  
 
@@ -440,7 +443,7 @@ def query_data(date_range, tank):
         SELECT 
             NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
             NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
-                            [Tank].[Tank ID].&[{tank}] *
+                            [Finishing Source Tank].[Source Tank ID].&[{tank}] *
                             [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
             DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
         ON ROWS 
@@ -448,17 +451,27 @@ def query_data(date_range, tank):
             SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
                         [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
             ON COLUMNS 
+        FROM ( 
+            SELECT ({{ [Production Type].[Production Type Hierarchy].[Lot Type／Scheduled].&[M-Scheduled], 
+                        [Production Type].[Production Type Hierarchy].[SubType].&[F-Engineering]}}) 
+                        ON COLUMNS 
             FROM [PPD_Actual]
-        ) 
+        ) )
         WHERE ( [Defect Tracking].[Defect Group].&[M_Melt Loss] ) 
         CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
     """
+    gen_condition = ", ".join ([f"[FG Product].[FG_Gen].&[{gen}]" for gen in gen ])if gen else ""
+    thickness_condition =", ".join ([f"[FG Product].[FG_Thickness].&[{thickness}]" for thickness in thickness ])if thickness else ""
+    line_condition =", ".join ([f"[Finishing Line].[Line ID].&[{line}]" for line in line ])if line else ""
+    print(gen_condition)
+    print(thickness_condition)
+    print(line_condition)
 
     # 查詢 Finishing Loss
     query_f = f"""
         SELECT NON EMPTY {{ [Measures].[F_Defect Loss%] }} ON COLUMNS, 
             NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
-                            [Tank].[Tank ID].&[{tank}] *
+                            [Finishing Source Tank].[Source Tank ID].&[{tank}] *
                             [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
             DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
         ON ROWS 
@@ -491,11 +504,14 @@ def query_data(date_range, tank):
                         [Production Type].[Production Type Hierarchy].[SubType].&[F-Plant] }}) 
                         ON COLUMNS 
             FROM [PPD_Actual]
-        ) )
-        WHERE ( [Time Crate].[CR_Date].CurrentMember ) )
+        ) ) )
+        WHERE ( [Time Crate].[CR_Date].CurrentMember,
+        [FG Product].[FG_Gen].&[7.5E2]  ) 
+        
         CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
     """
-
+    print('M = ',get_PPD(query_m))
+    print('F = ',get_PPD(query_f))
     try:
         # 數據清理
         df_cleaned_M = clean_data(get_PPD(query_m))
@@ -561,25 +577,25 @@ def update_defect_picker(loss_type, tank, date_range, data_melting, data_finishi
     # 根據 loss_type 合併數據
     if loss_type == 'melting+finishing':
         filtered_df_melting = df_cleaned_M[
-            (df_cleaned_M["Tank ID"] == tank) &
+            (df_cleaned_M["Source Tank ID"] == tank) &
             (df_cleaned_M["CR_Date"] >= start_date) &
             (df_cleaned_M["CR_Date"] <= end_date)
         ]
         filtered_df_finishing = df_cleaned_F[
-            (df_cleaned_F["Tank ID"] == tank) &
+            (df_cleaned_F["Source Tank ID"] == tank) &
             (df_cleaned_F["CR_Date"] >= start_date) &
             (df_cleaned_F["CR_Date"] <= end_date)
         ]
         filtered_df = pd.concat([filtered_df_melting, filtered_df_finishing])
     elif loss_type == 'melting':
         filtered_df = df_cleaned_M[
-            (df_cleaned_M["Tank ID"] == tank) &
+            (df_cleaned_M["Source Tank ID"] == tank) &
             (df_cleaned_M["CR_Date"] >= start_date) &
             (df_cleaned_M["CR_Date"] <= end_date)
         ]
     elif loss_type == 'finishing':
         filtered_df = df_cleaned_F[
-            (df_cleaned_F["Tank ID"] == tank) &
+            (df_cleaned_F["Source Tank ID"] == tank) &
             (df_cleaned_F["CR_Date"] >= start_date) &
             (df_cleaned_F["CR_Date"] <= end_date)
         ]
