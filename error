@@ -1,4 +1,3 @@
-Microsoft.AnalysisServices.AdomdClient.AdomdErrorResponseException: Query (19, 9) 在 Crossjoin 函數中使用不止一次 Production Type Hierarchy 階層。
 @app.callback(  # 此 PPD query data 為最後 performance data 畫圖用
     Output("filtered-data-melting", "data"),
     Output("filtered-data-finishing", "data"),
@@ -30,12 +29,14 @@ def query_data(date_range, tank, gen, thickness, line):
                 SELECT 
                     {{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
                         [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }} ON COLUMNS 
-                FROM [PPD_Actual]
+                FROM ( 
+                    SELECT 
+                        {{ [Production Type].[Production Type Hierarchy].[Lot Type／Scheduled].&[M-Scheduled], 
+                           [Production Type].[Production Type Hierarchy].[SubType].&[F-Engineering] }} 
+                        ON COLUMNS 
+                    FROM [PPD_Actual]
+                ) 
             ) 
-        ) 
-        WHERE ( 
-            [Production Type].[Production Type Hierarchy].[Lot Type／Scheduled].&[M-Scheduled], 
-            [Production Type].[Production Type Hierarchy].[SubType].&[F-Engineering] 
         ) 
         CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
     """
@@ -79,15 +80,19 @@ def query_data(date_range, tank, gen, thickness, line):
                            [Defect Tracking].[Defect ID].&[168], 
                            [Defect Tracking].[Defect ID].&[835] }} 
                         ON COLUMNS 
-                    FROM [PPD_Actual]
+                    FROM ( 
+                        SELECT 
+                            {{ [Production Type].[Production Type Hierarchy].[Lot Type／Scheduled].&[F-Normal], 
+                               [Production Type].[Production Type Hierarchy].[SubType].&[F-Div], 
+                               [Production Type].[Production Type Hierarchy].[SubType].&[F-Engineering], 
+                               [Production Type].[Production Type Hierarchy].[SubType].&[F-Plant] }} 
+                            ON COLUMNS 
+                        FROM [PPD_Actual]
+                    ) 
                 ) 
             ) 
         ) 
         WHERE ( 
-            [Production Type].[Production Type Hierarchy].[Lot Type／Scheduled].&[F-Normal], 
-            [Production Type].[Production Type Hierarchy].[SubType].&[F-Div], 
-            [Production Type].[Production Type Hierarchy].[SubType].&[F-Engineering], 
-            [Production Type].[Production Type Hierarchy].[SubType].&[F-Plant],
             {f"{{{gen_condition}}}" if gen_condition else ""},
             {f"{{{thickness_condition}}}" if thickness_condition else ""},
             {f"{{{line_condition}}}" if line_condition else ""}
