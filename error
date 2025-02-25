@@ -40,9 +40,9 @@ def query_data(date_range, tank, gen, thickness, line):
     """
 
     # 設置 Finishing Loss 的篩選條件
-    gen_condition = ", ".join ([f"[FG Product].[FG_Gen].&[{gen}]" for gen in gen ])if gen else ""
-    thickness_condition =", ".join ([f"[FG Product].[FG_Thickness].&[{thickness}]" for thickness in thickness ])if thickness else ""
-    line_condition =", ".join ([f"[Finishing Line].[Line ID].&[{line}]" for line in line ])if line else ""
+    gen_condition = ", ".join ([f"[FG Product].[FG_Gen].&[{gen}]" for gen in gen ]) if gen else ""
+    thickness_condition = ", ".join ([f"[FG Product].[FG_Thickness].&[{thickness}]" for thickness in thickness ]) if thickness else ""
+    line_condition = ", ".join ([f"[Finishing Line].[Line ID].&[{line}]" for line in line ]) if line else ""
 
     # 查詢 Finishing Loss
     query_f = f"""
@@ -60,7 +60,26 @@ def query_data(date_range, tank, gen, thickness, line):
                 SELECT 
                     {{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
                         [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }} ON COLUMNS 
-                FROM [PPD_Actual]
+                FROM ( 
+                    SELECT 
+                        {{ [Defect Tracking].[Defect ID].&[165], 
+                           [Defect Tracking].[Defect ID].&[1028], 
+                           [Defect Tracking].[Defect ID].&[311], 
+                           [Defect Tracking].[Defect ID].&[252], 
+                           [Defect Tracking].[Defect ID].&[407], 
+                           [Defect Tracking].[Defect ID].&[171], 
+                           [Defect Tracking].[Defect ID].&[838], 
+                           [Defect Tracking].[Defect ID].&[169], 
+                           [Defect Tracking].[Defect ID].&[836], 
+                           [Defect Tracking].[Defect ID].&[167], 
+                           [Defect Tracking].[Defect ID].&[834], 
+                           [Defect Tracking].[Defect ID].&[170], 
+                           [Defect Tracking].[Defect ID].&[837], 
+                           [Defect Tracking].[Defect ID].&[168], 
+                           [Defect Tracking].[Defect ID].&[835] }} 
+                        ON COLUMNS 
+                    FROM [PPD_Actual]
+                ) 
             ) 
         ) 
         WHERE ( 
