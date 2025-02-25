@@ -1,49 +1,102 @@
-Microsoft.AnalysisServices.AdomdClient.AdomdErrorResponseException: Query (40, 21) Parser: The syntax for '[PPD_Actual]' is incorrect. 
+@app.callback(  #此PPD query data為最後performance data畫圖用
+    Output("filtered-data-melting", "data"),
+    Output("filtered-data-finishing", "data"),
+    Input("date-picker", "value"),
+    Input("tank-picker", "value"),
+    Input("gen-picker", "value"),
+    Input("thickness-picker", "value"),
+    Input("line-picker", "value"),
+)
+def query_data(date_range, tank, gen, thickness, line): 
+    if not date_range or not tank:
+        raise PreventUpdate  
 
-query_f = f"""
-    SELECT NON EMPTY {{ [Measures].[F_Defect Loss%] }} ON COLUMNS, 
-        NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
-                        [Finishing Source Tank].[Source Tank ID].&[{tank}] *
-                        [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
-        DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
-    ON ROWS 
-    FROM ( 
-        SELECT (
-            {{ [Defect Tracking].[Defect ID].&[165], 
-            [Defect Tracking].[Defect ID].&[1028], 
-            [Defect Tracking].[Defect ID].&[311], 
-            [Defect Tracking].[Defect ID].&[252], 
-            [Defect Tracking].[Defect ID].&[407], 
-            [Defect Tracking].[Defect ID].&[171], 
-            [Defect Tracking].[Defect ID].&[838], 
-            [Defect Tracking].[Defect ID].&[169], 
-            [Defect Tracking].[Defect ID].&[836], 
-            [Defect Tracking].[Defect ID].&[167], 
-            [Defect Tracking].[Defect ID].&[834], 
-            [Defect Tracking].[Defect ID].&[170], 
-            [Defect Tracking].[Defect ID].&[837], 
-            [Defect Tracking].[Defect ID].&[168], 
-            [Defect Tracking].[Defect ID].&[835] }} 
-        ) ON COLUMNS 
-    FROM ( 
-        SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
-                    [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
-        ON COLUMNS 
-    FROM ( 
-        SELECT (
-            {{ [Production Type].[Production Type Hierarchy].[Lot Type／Scheduled].&[F-Normal], 
-                [Production Type].[Production Type Hierarchy].[SubType].&[F-Div], 
-                [Production Type].[Production Type Hierarchy].[SubType].&[F-Engineering], 
-                [Production Type].[Production Type Hierarchy].[SubType].&[F-Plant] }}) 
+    start_date, end_date = map(pd.to_datetime, date_range)
+
+    # 查詢 Melting Loss 
+    query_m = f"""
+        SELECT 
+            NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
+            NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
+                            [Finishing Source Tank].[Source Tank ID].&[{tank}] *
+                            [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
+            DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
+        ON ROWS 
+        FROM ( 
+            SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
+                        [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
             ON COLUMNS 
-    FROM ( 
-        {f"SELECT ({{ {gen_condition} }}) ON COLUMNS FROM (" if gen_condition else ""}
-        {f"SELECT ({{ {thickness_condition} }}) ON COLUMNS FROM (" if thickness_condition else ""}
-        {f"SELECT ({{ {line_condition} }}) ON COLUMNS FROM (" if line_condition else ""}
-            [PPD_Actual]
-        {")" * (bool(gen_condition) + bool(thickness_condition) + bool(line_condition))}
-    ) ) ) )
-    WHERE ( [Time Crate].[CR_Date].CurrentMember ) 
-    )
-    CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
-"""
+        FROM ( 
+            SELECT ({{ [Production Type].[Production Type Hierarchy].[Lot Type／Scheduled].&[M-Scheduled], 
+                        [Production Type].[Production Type Hierarchy].[SubType].&[F-Engineering]}}) 
+                        ON COLUMNS 
+            FROM [PPD_Actual]
+        ) )
+        WHERE ( [Defect Tracking].[Defect Group].&[M_Melt Loss] ) 
+        CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
+    """
+    gen_condition = ", ".join ([f"[FG Product].[FG_Gen].&[{gen}]" for gen in gen ])if gen else ""
+    thickness_condition =", ".join ([f"[FG Product].[FG_Thickness].&[{thickness}]" for thickness in thickness ])if thickness else ""
+    line_condition =", ".join ([f"[Finishing Line].[Line ID].&[{line}]" for line in line ])if line else ""
+    print(gen_condition)
+    print(thickness_condition)
+    print(line_condition)
+
+    # 查詢 Finishing Loss
+    query_f = f"""
+        SELECT NON EMPTY {{ [Measures].[F_Defect Loss%] }} ON COLUMNS, 
+            NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
+                            [Finishing Source Tank].[Source Tank ID].&[{tank}] *
+                            [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
+            DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
+        ON ROWS 
+        FROM ( 
+            SELECT (
+                {{ [Defect Tracking].[Defect ID].&[165], 
+                [Defect Tracking].[Defect ID].&[1028], 
+                [Defect Tracking].[Defect ID].&[311], 
+                [Defect Tracking].[Defect ID].&[252], 
+                [Defect Tracking].[Defect ID].&[407], 
+                [Defect Tracking].[Defect ID].&[171], 
+                [Defect Tracking].[Defect ID].&[838], 
+                [Defect Tracking].[Defect ID].&[169], 
+                [Defect Tracking].[Defect ID].&[836], 
+                [Defect Tracking].[Defect ID].&[167], 
+                [Defect Tracking].[Defect ID].&[834], 
+                [Defect Tracking].[Defect ID].&[170], 
+                [Defect Tracking].[Defect ID].&[837], 
+                [Defect Tracking].[Defect ID].&[168], 
+                [Defect Tracking].[Defect ID].&[835] }} 
+        ) ON COLUMNS 
+        FROM ( 
+            SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
+                        [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
+            ON COLUMNS 
+        FROM ( 
+            SELECT ({{ [Production Type].[Production Type Hierarchy].[Lot Type／Scheduled].&[F-Normal], 
+                        [Production Type].[Production Type Hierarchy].[SubType].&[F-Div], 
+                        [Production Type].[Production Type Hierarchy].[SubType].&[F-Engineering], 
+                        [Production Type].[Production Type Hierarchy].[SubType].&[F-Plant] }}) 
+                        ON COLUMNS 
+            FROM [PPD_Actual]
+        ) ) )
+        WHERE ( [Time Crate].[CR_Date].CurrentMember,
+        [FG Product].[FG_Gen].&[7.5E2]  ) 
+        
+        CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
+    """
+    print('M = ',get_PPD(query_m))
+    print('F = ',get_PPD(query_f))
+    try:
+        # 數據清理
+        df_cleaned_M = clean_data(get_PPD(query_m))
+        df_cleaned_F = clean_data(get_PPD(query_f))
+        # 將數據轉成字典返回
+        return df_cleaned_M.to_dict("records"), df_cleaned_F.to_dict("records")
+        
+    except Exception as e:
+        print("Error occurred during query execution:")
+        print(e)
+        return [], []
+
+把query_m與query_f 所有的篩選條件都放到where，並保留在select的source tank id顯示allmember
