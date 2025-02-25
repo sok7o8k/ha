@@ -1,3 +1,4 @@
+Microsoft.AnalysisServices.AdomdClient.AdomdErrorResponseException: Query (9, 9) 在 Crossjoin 函數中使用不止一次 Defect ID 階層。
 Microsoft.AnalysisServices.AdomdClient.AdomdErrorResponseException: Source Tank ID 階層已出現在 Axis1 軸上。
 @app.callback(  # 此 PPD query data 為最後 performance data 畫圖用
     Output("filtered-data-melting", "data"),
