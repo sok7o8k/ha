@@ -59,6 +59,7 @@ defect_order = {
     'Melt Blister': 14,
     'Inclusion': 15,
     'PM Melting': 16,
+    'Streak': 17
 }
 
 def clean_data(df):
@@ -452,12 +453,22 @@ def query_data(date_range, tank, gen, thickness, line):
                         [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
             ON COLUMNS 
         FROM ( 
+            SELECT ({{ [Defect Tracking].[Defect ID].&[60],
+                        [Defect Tracking].[Defect ID].&[672],
+                        [Defect Tracking].[Defect ID].&[59],
+                        [Defect Tracking].[Defect ID].&[757],
+                        [Defect Tracking].[Defect ID].&[832],
+                        [Defect Tracking].[Defect ID].&[97],
+                        [Defect Tracking].[Defect ID].&[698],
+                        [Defect Tracking].[Defect ID].&[81],
+                        [Defect Tracking].[Defect ID].&[681] }}) 
+            ON COLUMNS 
+        FROM ( 
             SELECT ({{ [Production Type].[Production Type Hierarchy].[Lot Type／Scheduled].&[M-Scheduled], 
-                        [Production Type].[Production Type Hierarchy].[SubType].&[F-Engineering]}}) 
+                        [Production Type].[Production Type Hierarchy].[SubType].&[F-Engineering] }}) 
                         ON COLUMNS 
             FROM [PPD_Actual]
-        ) )
-        WHERE ( [Defect Tracking].[Defect Group].&[M_Melt Loss] ) 
+        ) ) ) 
         CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
     """
     gen_condition = ", ".join ([f"[FG Product].[FG_Gen].&[{gen}]" for gen in gen ])if gen else ""
@@ -505,13 +516,14 @@ def query_data(date_range, tank, gen, thickness, line):
                         ON COLUMNS 
             FROM [PPD_Actual]
         ) ) )
-        WHERE ( [Time Crate].[CR_Date].CurrentMember,
-        [FG Product].[FG_Gen].&[7.5E2]  ) 
         
         CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
     """
     print('M = ',get_PPD(query_m))
     print('F = ',get_PPD(query_f))
+    M = get_PPD(query_m)
+    M.to_excel('loss_M.xlsx', index = False)
+
     try:
         # 數據清理
         df_cleaned_M = clean_data(get_PPD(query_m))
