@@ -349,7 +349,7 @@ app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.BOOTS
 app.layout = layout(0)
 
 # def callbacks(dashapp):
-#動態更新當前日期
+# 動態更新當前日期
 @app.callback(
     Output('date-picker', 'maxDate'),
     Input('date-picker', 'id')
@@ -422,7 +422,25 @@ def query_data(date_range, tank):
         print(e)
         return [], []
     
-#####
+# 這段是在把PPD的Line ID轉換成OLAP語法對應的line，如TCL101對應的是[Finishing Line].[Line ID].&[TC]&[L101],
+# NL01對應的是[Finishing Line].[Line ID].&[KN]&[NL01]，因毫無邏輯所以需要個別處理
+def format_line_id(line):
+    prefix_map = {
+    "TCL": "[TC]&[L",
+     "NL": "[KN]&[",
+     "CL": "[KC]&[",
+     "TNL": "[TN]&[L",
+     "HFL": "[HF]&[HF",
+     "CQL": "[CQ]&[L",
+     "BJL": "[BJ]&[L",
+     "WHL": "[WH]&[WH",
+     "SCL": "[SC]&[SC"
+   }
+    for prefix, format_str in prefix_map.items():
+        if line.startswith(prefix):
+            return f"[Finishing Line].[Line ID].&{format_str}{line[len(prefix):]}]"
+    return f"[Finishing Line].[Line ID].&[{line}]"
+
 
 @app.callback(  #此PPD query data為最後performance data畫圖用
     Output("filtered-data-melting", "data"),
@@ -471,9 +489,12 @@ def query_data(date_range, tank, gen, thickness, line):
         ) ) ) 
         CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
     """
-    gen_condition = ", ".join ([f"[FG Product].[FG_Gen].&[{gen}]" for gen in gen ])if gen else ""
-    thickness_condition =", ".join ([f"[FG Product].[FG_Thickness].&[{thickness}]" for thickness in thickness ])if thickness else ""
-    line_condition =", ".join ([f"[Finishing Line].[Line ID].&[{line}]" for line in line ])if line else ""
+    gen_condition = ", ".join([f"[FG Product].[FG_Gen].&[{float(gen):.1f}E2]" for gen in gen]) if gen else ""
+    gen_condition = gen_condition.strip("'")
+    thickness_condition = ", ".join([f"[FG Product].[FG_Thickness].&[{float(thickness):.1E}]" for thickness in thickness]) if thickness else ""
+    thickness_condition = thickness_condition.strip("'")
+    line_condition = ", ".join([format_line_id(line) for line in line]) if line else ""
+    line_condition = line_condition.strip("'")
     print(gen_condition)
     print(thickness_condition)
     print(line_condition)
@@ -514,11 +535,21 @@ def query_data(date_range, tank, gen, thickness, line):
                         [Production Type].[Production Type Hierarchy].[SubType].&[F-Engineering], 
                         [Production Type].[Production Type Hierarchy].[SubType].&[F-Plant] }}) 
                         ON COLUMNS 
+        FROM ( 
+            SELECT ({{ {gen_condition} }})
+            ON COLUMNS
+        FROM ( 
+            SELECT ({{ {thickness_condition} }})
+            ON COLUMNS
+                FROM ( 
+            SELECT ({{ {line_condition} }})
+            ON COLUMNS
             FROM [PPD_Actual]
-        ) ) )
+        ) ) ) ) ) )
         
         CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
     """
+    print(query_f)
     print('M = ',get_PPD(query_m))
     print('F = ',get_PPD(query_f))
     M = get_PPD(query_m)
