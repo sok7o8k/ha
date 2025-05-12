@@ -151,10 +151,11 @@ def layout(dashapp):
                         options=[
                             {'label': '-1 year', 'value': '1Y'},
                             {'label': '-6 months', 'value': '6M'},
+                            {'label': '-3 months', 'value': '3M'},                            
                             {'label': '-1 month', 'value': '1M'},
                             {'label': '-7 days', 'value': '7D'},
                         ],
-                        value='1M',  
+                        value='7D',  
                         labelStyle={'display': 'inline-block', 'margin-right': '10px'},
                         inline=True,
                         className="mb-3"
@@ -576,6 +577,7 @@ def update_datepicker(selected_period):
     dic = {
         '1Y': 365,
         '6M': 182,
+        '3M': 90,
         '1M': 30,
         '7D': 7,
     }
