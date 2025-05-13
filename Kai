@@ -421,7 +421,7 @@ def query_data(date_range, tank):
     except Exception as e:
         print("Error occurred during query execution:")
         print(e)
-        return [], []
+        return [], [], [], [], [], []
     
 # 這段是在把PPD的Line ID轉換成OLAP語法對應的line，如TCL101對應的是[Finishing Line].[Line ID].&[TC]&[L101],
 # NL01對應的是[Finishing Line].[Line ID].&[KN]&[NL01]，因毫無邏輯所以需要個別處理
