@@ -402,7 +402,6 @@ def query_data(date_range, tank):
     try:
         # 數據清理
         df_cleaned_F = clean_data(get_PPD(query_f))
-        df_cleaned_F.to_excel('loss_F.xlsx', index=False)
         # 獲取唯一的 Defect ID 選項
         all_gen = df_cleaned_F["FG_Gen"].dropna().unique()
         all_thickness = df_cleaned_F["FG_Thickness"].dropna().unique()
@@ -678,7 +677,7 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, p
 
     start_date, end_date = map(pd.to_datetime, date_range)
 
-    if not data_melting and not data_finishing:
+    if not data_melting and not data_finishing and not tags:
         fig.add_annotation(
             text=f"No loss data available on PPD for the selected period\n({start_date} to {end_date})",
             xref="paper", yref="paper",
