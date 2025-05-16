@@ -190,7 +190,8 @@ def layout(dashapp):
                         options=[
                             {'label': 'Melting Loss', 'value': 'melting'},
                             {'label': 'Finishing Loss', 'value': 'finishing'},
-                            {'label': 'Melting + Finishing loss', 'value': 'melting+finishing'}
+                            {'label': 'Melting + Finishing loss', 'value': 'melting+finishing'},
+                            {'label': 'Pi Data Only', 'value': 'pi'}                            
                         ],
                         value='melting',  # 預設值為 melting
                     ),
@@ -677,7 +678,8 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, p
 
     start_date, end_date = map(pd.to_datetime, date_range)
 
-    if not data_melting and not data_finishing and not tags:
+#在loss type為pi data only下，什麼都不選會秀一張標題為process chart的空圖，而不是No loss data available on PPD for the selected period
+    if not data_melting and not data_finishing and not tags and loss_type != 'pi':
         fig.add_annotation(
             text=f"No loss data available on PPD for the selected period\n({start_date} to {end_date})",
             xref="paper", yref="paper",
@@ -705,7 +707,8 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, p
         filtered_df_finishing = filter_df(df_cleaned_F, start_date, end_date, tank)
         filtered_df = pd.concat([filtered_df_melting, filtered_df_finishing])
 
-    if defect:
+#在loss type為pi data only下，不繪製defect
+    if defect and loss_type != 'pi':
         final_df = filtered_df[filtered_df['Defect ID'].isin(defect)]
         defect = sorted(defect, key=lambda v: defect_order[v])
         for selected_defect in defect:
@@ -799,7 +802,7 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, p
     fig.update_layout(
         showlegend=True,
         title=dict(
-            text=f'<B>{tank} Inclusion loss and Process Chart' if defect else f'{tank} Process Chart</B>',
+            text=f'<B>{tank} Inclusion loss and Process Chart</B>' if defect else f'<B>{tank} Process Chart</B>',
             automargin=True,
             font_size=18
         ),
