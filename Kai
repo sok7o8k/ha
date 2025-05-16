@@ -154,6 +154,7 @@ def layout(dashapp):
                             {'label': '-3 months', 'value': '3M'},                            
                             {'label': '-1 month', 'value': '1M'},
                             {'label': '-7 days', 'value': '7D'},
+                            {'label': '-1 day', 'value': '1D'}
                         ],
                         value='7D',  
                         labelStyle={'display': 'inline-block', 'margin-right': '10px'},
@@ -571,6 +572,7 @@ def update_datepicker(selected_period):
         '3M': 90,
         '1M': 30,
         '7D': 7,
+        '1D': 0
     }
 
     start_date = today - timedelta(days=dic[selected_period])
