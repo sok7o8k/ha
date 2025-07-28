@@ -1,4 +1,4 @@
-Sub UpdateNGHistory3()
+Sub UpdateNGHistory()
 
     ' === 1. 背景更新所有 TC 檔案 ===
     Dim i As Integer
@@ -51,7 +51,6 @@ Sub UpdateNGHistory3()
     End If
     On Error GoTo 0
 
-    wsHistory.Cells.ClearContents
     timePoints = GetTimePoints()
 
     ' 第一列第一欄輸入 "Time"
@@ -121,4 +120,3 @@ Function GetTimePoints() As Variant
 
     GetTimePoints = timePoints
 End Function
-
