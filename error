@@ -1,123 +1,13 @@
-Sub UpdateNGHistory()
-
-    ' === 1. 背景更新所有 TC 檔案 ===
-    Dim i As Integer
-    Dim filePath As String
-    Dim wb As Workbook
-    Dim mainWB As Workbook
-    Dim folderPath As String
-    Dim fileName As String
-
-    Set mainWB = ThisWorkbook
-    folderPath = "C:\Users\chenk23\OneDrive - Corning Incorporated\Desktop\Critical alarm\"  ' ← 請確認路徑正確
-
-    Application.ScreenUpdating = False
-    Application.DisplayAlerts = False
-    Application.EnableEvents = False
-    Application.Calculation = xlCalculationManual
-
-    For i = 1 To 21
-        fileName = "Melting critical alarm Base case - TC" & Format(i, "00") & ".xlsx"
-        filePath = folderPath & fileName
-
-        If Dir(filePath) <> "" Then
-            Set wb = Workbooks.Open(filePath, UpdateLinks:=False, ReadOnly:=True)
-            wb.RefreshAll
-            Application.CalculateFull
-            wb.Close SaveChanges:=False
-        End If
-    Next i
-
-    Application.Calculation = xlCalculationAutomatic
-    Application.EnableEvents = True
-    Application.DisplayAlerts = True
-    Application.ScreenUpdating = True
-
-    mainWB.RefreshAll
+    Dim conn As WorkbookConnection
+    With mainWB
+      For Each conn In .Connections
+        On Error Resume Next
+          conn.OLEDBConnection.BackgroundQuery = False
+          conn.ODBCConnection.BackgroundQuery  = False
+        On Error GoTo 0
+      Next
+    End With
     
+    ' 同步呼叫 RefreshAll → 程式會等到所有連線都跑完才往下
+    mainWB.RefreshAll
     Application.CalculateFullRebuild
-
-    ' === 2. 更新 NG History（轉置 + 時間點 + 往上移） ===
-    Dim wsRaw As Worksheet
-    Dim wsHistory As Worksheet
-    Dim j As Integer
-    Dim timePoints As Variant
-
-    Set wsRaw = ThisWorkbook.Sheets("raw")
-    On Error Resume Next
-    Set wsHistory = ThisWorkbook.Sheets("NG History")
-    If wsHistory Is Nothing Then
-        Set wsHistory = ThisWorkbook.Sheets.Add(After:=wsRaw)
-        wsHistory.Name = "NG History"
-    End If
-    On Error GoTo 0
-
-    timePoints = GetTimePoints()
-
-    ' 第一列第一欄輸入 "Time"
-    wsHistory.Cells(1, 1).Value = "Time"
-
-    ' 標題列：TC01 ~ TC21
-    For i = 1 To 21
-        wsHistory.Cells(1, i + 1).Value = "TC" & Format(i, "00")
-    Next i
-
-    ' 標題欄：時間點
-    For i = 1 To 10
-        wsHistory.Cells(i + 1, 1).Value = timePoints(i)
-    Next i
-
-
-    ' 資料往上移（第 2~10 列往第 1~9 列）
-    For i = 3 To 11
-      For j = 2 To 22
-          wsHistory.Cells(i - 1, j).Value = wsHistory.Cells(i, j).Value
-       Next j
-    Next i
-
-    ' 新資料寫入第 10 列（時間點最晚）
-    For i = 0 To 20
-       wsHistory.Cells(11, i + 2).Value = wsRaw.Cells(i + 4, 3).Value
-    Next i
-
-    MsgBox "所有 TC 檔案與 NG History 已背景更新完成！", vbInformation
-
-    ' === 3. 匯出 NG History 為 .xlsx 檔案 ===
-    Dim exportWB As Workbook
-    Dim exportPath As String
-
-    exportPath = folderPath & "Critical Alarm raw data.xlsx"
-
-    ThisWorkbook.Sheets("NG History").Copy
-    Set exportWB = ActiveWorkbook
-
-    Application.DisplayAlerts = False
-    exportWB.SaveAs fileName:=exportPath, FileFormat:=xlOpenXMLWorkbook
-    exportWB.Close SaveChanges:=False
-    Application.DisplayAlerts = True
-
-End Sub
-
-Function GetTimePoints() As Variant
-    Dim timePoints(1 To 10) As String
-    Dim currentTime As Date
-    Dim baseTime As Date
-    Dim i As Integer
-
-    currentTime = Now
-
-    If Hour(currentTime) >= 20 Then
-        baseTime = Date + TimeSerial(20, 0, 0)
-    ElseIf Hour(currentTime) >= 8 Then
-        baseTime = Date + TimeSerial(8, 0, 0)
-    Else
-        baseTime = Date - 1 + TimeSerial(20, 0, 0)
-    End If
-
-    For i = 10 To 1 Step -1
-        timePoints(i) = Format(baseTime, "yyyy/mm/dd hh:mm")
-        baseTime = baseTime - TimeSerial(12, 0, 0)
-    Next i
-
-    GetTimePoints = timePoints
-End Function
