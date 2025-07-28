@@ -34,6 +34,7 @@ Sub UpdateNGHistory()
     Application.ScreenUpdating = True
 
     mainWB.RefreshAll
+    
     Application.CalculateFullRebuild
 
     ' === 2. 更新 NG History（轉置 + 時間點 + 往上移） ===
