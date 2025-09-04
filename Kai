@@ -62,6 +62,13 @@ defect_order = {
     'Streak': 17
 }
 
+# 建立 TC 選項
+tc_options = [{'label': f'TC{str(i).zfill(2)}', 'value': f'TC{str(i).zfill(2)}'} for i in range(1, 22)]
+# 建立 TN 選項
+tn_options = [{'label': f'TN{str(i).zfill(2)}', 'value': f'TN{str(i).zfill(2)}'} for i in range(1, 9)]
+# 合併所有選項
+all_options = tc_options + tn_options
+
 def clean_data(df):
     """
     清理 DataFrame 的欄位名稱和數據格式。
@@ -173,7 +180,7 @@ def layout(dashapp):
                 dbc.Col(
                     dcc.Dropdown(
                         id='tank-picker',
-                        options=[{'label': f'TC{str(i).zfill(2)}', 'value': f'TC{str(i).zfill(2)}'} for i in range(1,22)],
+                        options=all_options,
                         value='TC01'
                     ),
                     width=12, lg=9
@@ -552,13 +559,16 @@ def query_data(date_range, tank, gen, thickness, line):
         # 數據清理
         df_cleaned_M = clean_data(get_PPD(query_m))
         df_cleaned_F = clean_data(get_PPD(query_f))
+        print(df_cleaned_M)
         # 將數據轉成字典返回
         return df_cleaned_M.to_dict("records"), df_cleaned_F.to_dict("records")
-        
+
+
     except Exception as e:
         print("Error occurred during query execution:")
         print(e)
         return [], []
+
 
 @app.callback(
     Output('date-picker', 'value'),
@@ -653,7 +663,11 @@ def update_defect_picker(loss_type, tank, date_range, data_melting, data_finishi
     Input("tank-picker", "value")
 )
 def update_tags_options(Tank_ID):
-    with PI.PIServer(server="grape") as server:
+    if Tank_ID.startswith('TC'):
+        servername = 'grape'
+    else:
+        servername = 'plum'  # TN PI server name
+    with PI.PIServer(server=servername) as server:
         points = server.search(f'*T{Tank_ID}*')
         pi_tags = [p.name for p in points]
 
@@ -731,7 +745,10 @@ def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, p
 
     # 如果有選擇 PI tags 且有日期範圍，則提取並繪製 PI 數據
     if tags and start_date and end_date:
-        servername = "grape"  # 設定 PI 伺服器名稱
+        if tank.startswith('TC'):
+             servername = 'grape'
+        else:
+             servername = 'plum'  # TN PI server name
         with PI.PIServer(server=servername) as server:
             points = server.search(tags)  # 搜尋所選的 PI tags
             if len(points) > 0:
