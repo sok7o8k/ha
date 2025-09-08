@@ -555,19 +555,23 @@ def query_data(date_range, tank, gen, thickness, line):
         
         CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
     """
+    # 分別處理每個查詢
+    melting_data = []
+    finishing_data = []
+
     try:
-        # 數據清理
         df_cleaned_M = clean_data(get_PPD(query_m))
-        df_cleaned_F = clean_data(get_PPD(query_f))
-        print(df_cleaned_M)
-        # 將數據轉成字典返回
-        return df_cleaned_M.to_dict("records"), df_cleaned_F.to_dict("records")
-
-
+        melting_data = df_cleaned_M.to_dict("records")
     except Exception as e:
-        print("Error occurred during query execution:")
-        print(e)
-        return [], []
+        print(f"Melting Loss query failed: {e}")
+
+    try:
+        df_cleaned_F = clean_data(get_PPD(query_f))
+        finishing_data = df_cleaned_F.to_dict("records")
+    except Exception as e:
+        print(f"Finishing Loss query failed: {e}")
+
+    return melting_data, finishing_data
 
 
 @app.callback(
