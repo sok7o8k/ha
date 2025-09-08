@@ -1,13 +1,17 @@
-    Dim conn As WorkbookConnection
-    With mainWB
-      For Each conn In .Connections
-        On Error Resume Next
-          conn.OLEDBConnection.BackgroundQuery = False
-          conn.ODBCConnection.BackgroundQuery  = False
-        On Error GoTo 0
-      Next
-    End With
-    
-    ' 同步呼叫 RefreshAll → 程式會等到所有連線都跑完才往下
-    mainWB.RefreshAll
-    Application.CalculateFullRebuild
+# 分別處理每個查詢
+melting_data = []
+finishing_data = []
+
+try:
+    df_cleaned_M = clean_data(get_PPD(query_m))
+    melting_data = df_cleaned_M.to_dict("records")
+except Exception as e:
+    print(f"Melting Loss query failed: {e}")
+
+try:
+    df_cleaned_F = clean_data(get_PPD(query_f))
+    finishing_data = df_cleaned_F.to_dict("records")
+except Exception as e:
+    print(f"Finishing Loss query failed: {e}")
+
+return melting_data, finishing_data
