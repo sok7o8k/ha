@@ -1,187 +1,73 @@
-from sys import path
-import plotly.graph_objects as go
-import plotly.express as px
-from dash import Dash, html, dcc, Input, Output
-import dash_bootstrap_components as dbc
+from dash import Dash, html, dcc, Input, Output, ctx
 from dash.exceptions import PreventUpdate
+import dash_bootstrap_components as dbc
+import dash_mantine_components as dmc
+from datetime import datetime, timedelta
+import os
 import pandas as pd
 import PIconnect as PI
-from datetime import datetime, timedelta
-
+import plotly.graph_objects as go
+import plotly.express as px
+from plotly.subplots import make_subplots
+import clr
 PI.PIConfig.DEFAULT_TIMEZONE = "Asia/Taipei"
+# 15 16 417 418
+clr.AddReference(os.path.abspath('./Microsoft.AnalysisServices.AdomdClient.dll'))
+#clr.AddReference(os.path.abspath('./app/dashapps/tw/melting/campaign_ref/Microsoft.AnalysisServices.AdomdClient.dll'))
+clr.AddReference("System.Data")
+
+# 這兩行一定要在clr那兩行後面，且秀error是正常的，因為dll不是python package，clr是讓microsoft的dll函式套件可以讓我們用python控制
+from Microsoft.AnalysisServices.AdomdClient import AdomdConnection , AdomdDataAdapter
+from System.Data import DataSet
 
 
-from pyadomd import Pyadomd
-import pandas as pd
-import dash_core_components as dcc
-import dash_html_components as html
-from dash.dependencies import Input, Output
-import dash_mantine_components as dmc
+# 選擇固定的顏色板，這裡以 Plotly 的顏色板為例
+color_palette = px.colors.qualitative.Plotly
+defect_colors = {
+    'Cord': "rgb(128, 128, 128)",
+    'Inclusion': "rgb(116, 155, 226)",
+    'PM Melting': "rgb(128, 56, 193)",
+    'Melt Blister': "rgb(138, 205, 67)",
 
-app = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP])
+    'Blister': '#008800',
+    'Crystalline Pt': '#B3B3B3',
+    'Inclusion (Manual)': '#118DFF',
+    'Inclusion (IIS)': '#85C5FF',
+    'Inclusion (MRS miss)': '#0000CD',
+    'Needle Pt': '#E66C37',
+    'Other Inclusion': '#F0EA00',
+    'Platinum': '#00FFFF',
+    'Surface Blister': '#00FF00',
+    'Zr': '#8B0000'
+}
+defect_order = {
+    'Blister': 0,
+    'Crystalline Pt': 1,
+    'Inclusion (Manual)': 2,
+    'Inclusion (IIS)': 3,
+    'Inclusion (ISIS)': 4,
+    'Inclusion (MRS miss)': 5,
+    'Needle Pt': 6,
+    'Other Inclusion': 7,
+    'Platinum': 8,
+    'Surface Blister': 9,
+    'Zr': 10,
+    'Onclusion': 11,
+    'Silica': 12,
 
-app.layout = dbc.Container([
-    dbc.Row([
-        dbc.Col([
-            dbc.Card([
-                dbc.CardHeader("選擇日期"),
-                dbc.CardBody([
-                    dmc.DateRangePicker(
-                        id='date-picker',
-                        minDate='2009-01-01',
-                        maxDate=(datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d'),
-                        value=[
-                            (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
-                            (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
-                        ],
-                        label="日期範圍",
-                        fullWidth=True
-                    ),
-                    dcc.RadioItems(
-                        id='date-shortcuts',
-                        options=[
-                            {'label': '-1 year', 'value': '1Y'},
-                            {'label': '-6 months', 'value': '6M'},
-                            {'label': '-1 month', 'value': '1M'},
-                            {'label': '-7 days', 'value': '7D'},
-                        ],
-                        value='1M',  
-                        labelStyle={'display': 'inline-block', 'margin-right': '10px'},
-                        inline=True,
-                        className="mb-3"
-                    ),
-                ])
-            ], className="mb-3"),
-            dbc.Card([
-                dbc.CardHeader("選擇Tank"),
-                dbc.CardBody([
-                    dcc.Dropdown(
-                        id='tank-picker',
-                        options=[{'label': f'TC{str(i).zfill(2)}', 'value': f'TC{str(i).zfill(2)}'} for i in range(1,22)],
-                        value='TC01'
-                    ),
-                ]),
-            ], className="mb-3"),
-            dbc.Card([
-                dbc.CardHeader("選擇 Loss 類型"),
-                dbc.CardBody([
-                    dcc.RadioItems(
-                        id='loss-type',
-                        options=[
-                            {'label': 'Melting Loss', 'value': 'melting'},
-                            {'label': 'Finishing Loss', 'value': 'finishing'},
-                            {'label': 'Melting + Finishing loss', 'value': 'melting+finishing'}
-                        ],
-                        value='melting',  # 預設值為 melting
-                        inline=True,
-                        labelStyle={'display': 'inline-block', 'margin-right': '10px'},
-                        className="mb-3"
-                    ),
-                ]),
-            ], className="mb-3"),
-            dbc.Card([
-                dbc.CardHeader("選擇Defect"),
-                dbc.CardBody([
-                    dcc.Dropdown(
-                        id="defect-picker",
-                        multi=True,  # 支持多選
-                        options=[],  # 初始為空，通過 callback 動態更新
-                        value=[]     # 初始值為空，通過 callback 動態更新
-                    ),
-                ]),
-            ], className="mb-3"),
-        ], width=5),
-    ]),
-    dbc.Row([
-    dbc.Col([
-        dbc.Card([
-            dbc.CardHeader("選擇Pi Data取值頻率"),
-            dbc.CardBody([
-                dcc.RadioItems(
-                    options=[
-                        {"label": "Daily", "value": "d"},
-                        {"label": "Hourly", "value": "h"},
-                        {"label": "5min", "value": "5m"},
-                        {"label": "1min", "value": "1m"}
-                    ],
-                    value="d",
-                    inline=True,
-                    id="interval",
-                    labelStyle={'display': 'inline-block', 'margin-right': '10px'},
-                    className="mb-3",
-                ),
-            ]),
-        ], className="mb-3"),
-    ], width=5),
-    ]),
-    dbc.Row([
-    dbc.Col([
-        dbc.Card([
-            dbc.CardHeader("選擇PI Tags"),
-            dbc.CardBody([
-                html.Div([
-                    dcc.Dropdown(
-                        options=[],
-                        multi=True,
-                        id="tags",
-                        className="mb-3",
-                    ),
-                ]),
-            ]),
-        ], className="mb-3"),
-    ], width=5),
-    ]),
-    dbc.Row([
-    dbc.Col([
-        dbc.Card([
-            dbc.CardHeader("Pi Data Y軸設定"),
-            dbc.CardBody([
-                html.Div([
-                    dcc.RadioItems(
-                        id="pi-y-axis-setting",
-                        options=[
-                            {'label': 'Single', 'value': 'single'},
-                            {'label': 'Multiple', 'value': 'multiple'}
-                        ],
-                        value='multiple',  # 預設為 multiple 模式
-                        inline=True,
-                        labelStyle={'display': 'inline-block', 'margin-right': '10px'},
-                        style={'margin-bottom': '10px'}
-                    ),
-                ]),
-            ]),
-        ], className="mb-3"),
-    ], width=5),
-    ]),
-        dbc.Row([
-        dbc.Col([
-            dbc.Card([
-                dbc.CardBody([
-                    dcc.Store(id='filtered-data-melting', data=[]),  # 用於緩存 Melting Loss 資料
-                    dcc.Store(id='filtered-data-finishing', data=[]),  # 用於緩存 Finishing Loss 資料
-                    dcc.Loading(  # 添加加載進度條
-                        id="loading-graph",
-                        type="default",  # 可以設置為 "default" 或 "graph"
-                        children=[
-                            dcc.Graph(
-                        id="combined-graph",
-                        style={"height": "500px"},
-                            ),
-                        ],
-                    ),
-                ]),
-            ], className="mb-3"),
-        ], width=11),
-    ]),
-])
+    'Cord': 13,
+    'Melt Blister': 14,
+    'Inclusion': 15,
+    'PM Melting': 16,
+    'Streak': 17
+}
 
-#動態更新當前日期
-@app.callback(
-    Output('date-picker', 'maxDate'),
-    Input('date-picker', 'id')
-)
-def update_max_date(_):
-    return (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+# 建立 TC 選項
+tc_options = [{'label': f'TC{str(i).zfill(2)}', 'value': f'TC{str(i).zfill(2)}'} for i in range(1, 22)]
+# 建立 TN 選項
+tn_options = [{'label': f'TN{str(i).zfill(2)}', 'value': f'TN{str(i).zfill(2)}'} for i in range(1, 9)]
+# 合併所有選項
+all_options = tc_options + tn_options
 
 def clean_data(df):
     """
@@ -205,490 +91,1052 @@ def clean_data(df):
     
     return df_cleaned
 
-@app.callback(
-    [Output("filtered-data-melting", "data"),
-     Output("filtered-data-finishing", "data")],
-    [Input("date-picker", "value"),
-     Input("tank-picker", "value")]
-)
-def query_data(date_range, tank):
-    if not date_range or not tank:
-        raise PreventUpdate  # 如果条件不完整，则不触发查询
+def get_PPD(query):
+    conn = AdomdConnection("Data Source=cgtppd;Catalog=ppd;") #連線字串
+    conn.Open() #開啟連線
+    cmd = conn.CreateCommand()
+    cmd.CommandText = query
+    adp = AdomdDataAdapter(cmd)
+    dataset = DataSet()
+    adp.Fill(dataset)
+    conn.Close() #關閉連線
 
-    conn_str = "Provider=MSOLAP;Data Source=cgtppd;Catalog=ppd;"
-    start_date, end_date = map(pd.to_datetime, date_range)
-
-    # 查询 Melting Loss 数据
-    query_m = f"""
-        SELECT 
-            NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
-            NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
-                             [Tank].[Tank ID].&[{tank}] *
-                             [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
-               DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
-        ON ROWS 
-        FROM ( 
-            SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
-                         [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
-            ON COLUMNS 
-            FROM [PPD_Actual]
-        ) 
-        WHERE ( [Defect Tracking].[Defect Group].&[M_Melt Loss] ) 
-        CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
-    """
-
-    # 查询 Finishing Loss 数据
-    query_f = f"""
-        SELECT NON EMPTY {{ [Measures].[F_Defect Loss%] }} ON COLUMNS, 
-               NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
-                             [Tank].[Tank ID].&[{tank}] *
-                             [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
-               DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
-        ON ROWS 
-        FROM ( 
-            SELECT (
-                {{ [Defect Tracking].[Defect ID].&[165], 
-                   [Defect Tracking].[Defect ID].&[1028], 
-                   [Defect Tracking].[Defect ID].&[311], 
-                   [Defect Tracking].[Defect ID].&[252], 
-                   [Defect Tracking].[Defect ID].&[407], 
-                   [Defect Tracking].[Defect ID].&[171], 
-                   [Defect Tracking].[Defect ID].&[838], 
-                   [Defect Tracking].[Defect ID].&[169], 
-                   [Defect Tracking].[Defect ID].&[836], 
-                   [Defect Tracking].[Defect ID].&[167], 
-                   [Defect Tracking].[Defect ID].&[834], 
-                   [Defect Tracking].[Defect ID].&[170], 
-                   [Defect Tracking].[Defect ID].&[837], 
-                   [Defect Tracking].[Defect ID].&[168], 
-                   [Defect Tracking].[Defect ID].&[835] }} 
-        ) ON COLUMNS 
-        FROM ( 
-            SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
-                         [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
-            ON COLUMNS 
-            FROM [PPD_Actual]
-        ) 
-        WHERE ( [Time Crate].[CR_Date].CurrentMember ) )
-        CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
-    """
-
-    try:
-        # 查询 Melting Loss 数据
-        with Pyadomd(conn_str) as conn:
-            with conn.cursor().execute(query_m) as cur:
-                df_m = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
-        # 查询 Finishing Loss 数据
-        with Pyadomd(conn_str) as conn:
-            with conn.cursor().execute(query_f) as cur:
-                df_f = pd.DataFrame(cur.fetchall(), columns=[col.name for col in cur.description])
-        # 数据清理
-        df_cleaned_M = clean_data(df_m)
-        df_cleaned_F = clean_data(df_f)
-        # 将数据转换为字典格式返回
-        return df_cleaned_M.to_dict("records"), df_cleaned_F.to_dict("records")
-        
-    except Exception as e:
-        print("Error occurred during query execution:")
-        print(e)
-        return [], []
-
-@app.callback(
-    Output('date-picker', 'value'),
-    Input('date-shortcuts', 'value')
-)
-def update_datepicker(selected_period):
-    today = datetime.today()
-    dic = {
-        '1Y': 365,
-        '6M': 182,
-        '1M': 30,
-        '7D': 7,
-    }
-
-    start_date = today - timedelta(days=dic[selected_period])
-    end_date = today + timedelta(days=1)
- 
-    return [start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')]
-
-@app.callback(
-    [Output("defect-picker", "options"),  # 更新 defect-picker 的選項
-     Output("defect-picker", "value")],  # 更新 defect-picker 的預設值
-    [Input("loss-type", "value"),         # 當 loss-type 改變時觸發
-     Input("tank-picker", "value"),       # 當 tank 改變時也觸發
-     Input("date-picker", "value"),      # 當日期範圍改變時觸發
-     Input("filtered-data-melting", "data"),  # 輸入 melting 數據
-     Input("filtered-data-finishing", "data")]  # 輸入 finishing 數據
-)
-def update_defect_picker(loss_type, tank, date_range, data_melting, data_finishing):
-    if not date_range or len(date_range) != 2 or not tank:
-        return [], []  # 如果輸入不完整，返回空選項和清空選擇
-
-    start_date, end_date = map(pd.to_datetime, date_range)
-
-    # 將輸入的字典格式數據轉換為 DataFrame
-    if data_melting:
-        df_cleaned_M = pd.DataFrame(data_melting)
-        df_cleaned_M["CR_Date"] = pd.to_datetime(df_cleaned_M["CR_Date"], errors="coerce")
-    else:
-        df_cleaned_M = pd.DataFrame()
-
-    if data_finishing:
-        df_cleaned_F = pd.DataFrame(data_finishing)
-        df_cleaned_F["CR_Date"] = pd.to_datetime(df_cleaned_F["CR_Date"], errors="coerce")
-    else:
-        df_cleaned_F = pd.DataFrame()
-
-    # 檢查資料是否存在
-    if df_cleaned_M.empty and df_cleaned_F.empty:
-        return [], []  # 如果沒有資料，返回空選項和清空選擇
-
-    # 根據 loss_type 合併數據
-    if loss_type == 'melting+finishing':
-        filtered_df_melting = df_cleaned_M[
-            (df_cleaned_M["Tank ID"] == tank) &
-            (df_cleaned_M["CR_Date"] >= start_date) &
-            (df_cleaned_M["CR_Date"] <= end_date)
-        ]
-        filtered_df_finishing = df_cleaned_F[
-            (df_cleaned_F["Tank ID"] == tank) &
-            (df_cleaned_F["CR_Date"] >= start_date) &
-            (df_cleaned_F["CR_Date"] <= end_date)
-        ]
-        filtered_df = pd.concat([filtered_df_melting, filtered_df_finishing])
-    elif loss_type == 'melting':
-        filtered_df = df_cleaned_M[
-            (df_cleaned_M["Tank ID"] == tank) &
-            (df_cleaned_M["CR_Date"] >= start_date) &
-            (df_cleaned_M["CR_Date"] <= end_date)
-        ]
-    elif loss_type == 'finishing':
-        filtered_df = df_cleaned_F[
-            (df_cleaned_F["Tank ID"] == tank) &
-            (df_cleaned_F["CR_Date"] >= start_date) &
-            (df_cleaned_F["CR_Date"] <= end_date)
-        ]
-    else:
-        return [], []
-
-    # 獲取唯一的 Defect ID 選項
-    all_defects = filtered_df["Defect ID"].dropna().unique()
-    defect_options = [{"label": defect, "value": defect} for defect in all_defects]
-    # 默認選中所有 Defect
-    default_values = list(all_defects)
-
-    return defect_options, default_values
-
-@app.callback(
-    Output("tags", "options"), 
-    Input("tank-picker", "value")
-)
-def update_tags_options(Tank_ID):
-    with PI.PIServer(server="grape") as server:
-        points = server.search(f'*T{Tank_ID}*')
-        pi_tags = [p.name for p in points]
-
-    return pi_tags
-
-
-from plotly.subplots import make_subplots
-import plotly.express as px
-
-# 選擇固定的顏色板，這裡以 Plotly 的顏色板為例
-color_palette = px.colors.qualitative.Plotly
-
-defect_colors = {
-    'Inclusion': '#FF8FFF',
-    'Cord': '#FF0000',
-    'PM Melting': '#000000',
-    'Blister': '#008800',
-    'Crystalline Pt': '#B3B3B3',
-    'Inclusion (Manual)': '#118DFF',
-    'Inclusion (IIS)': '#85C5FF',
-    'Inclusion (MRS miss)': '#0000CD',
-    'Needle Pt': '#E66C37',
-    'Other Inclusion': '#F0EA00',
-    'Platinum': '#00FFFF',
-    'Surface Blister': '#00FF00',
-    'Zr': '#8B0000'
-}
-
-@app.callback(
-    Output("combined-graph", "figure"),
-    [Input("tags", "value"),
-     Input("date-picker", "value"),
-     Input("interval", "value"),
-     Input("tank-picker", "value"),
-     Input("loss-type", "value"),
-     Input("defect-picker", "value"),
-     Input("pi-y-axis-setting", "value"),  # 新增 Y 軸模式輸入
-     Input("filtered-data-melting", "data"),  # 輸入 Melting 數據
-     Input("filtered-data-finishing", "data")]  # 輸入 Finishing 數據
-)
-def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, pi_y_axis_mode, 
-                          data_melting, data_finishing):
-    fig = go.Figure()
-
-    if not date_range or len(date_range) != 2 or not tank:
-        raise PreventUpdate  # 如果輸入條件不足，則不更新圖表
-        # 檢查資料是否存在
-
-    if not data_melting and not data_finishing:
-        fig.add_annotation(
-            text="No data available for the selected period (Cold Repair)",
-            xref="paper", yref="paper",
-            x=0.5, y=0.5, showarrow=False,
-            font=dict(size=20)
-        )
-        return fig
-
-    start_date, end_date = map(pd.to_datetime, date_range)
-
-    # 將輸入的字典格式數據轉換為 DataFrame
-    if data_melting:
-        df_cleaned_M = pd.DataFrame(data_melting)
-        df_cleaned_M["CR_Date"] = pd.to_datetime(df_cleaned_M["CR_Date"], errors="coerce")
-    else:
-        df_cleaned_M = pd.DataFrame()
-
-    if data_finishing:
-        df_cleaned_F = pd.DataFrame(data_finishing)
-        df_cleaned_F["CR_Date"] = pd.to_datetime(df_cleaned_F["CR_Date"], errors="coerce")
-    else:
-        df_cleaned_F = pd.DataFrame()
+    data_list = []
+    for i in range(dataset.Tables[0].Rows.Count):
+        row = []
+        for j in range(dataset.Tables[0].Columns.Count):
+            row.append(dataset.Tables[0].Rows[i][j])
+        data_list.append(row)
+    columns = [c.ColumnName for c in dataset.Tables[0].Columns]
+    df = pd.DataFrame(data_list, columns=columns)
     
-    # 根據 loss_type 合併數據
-    if loss_type in ['melting', 'finishing', 'melting+finishing']:
-        if loss_type == 'melting':
-            filtered_df = df_cleaned_M[
+    return df
+
+def filter_df(df, start_date, end_date, tank):
+    return df[
+        (df["CR_Date"] >= start_date) &
+        (df["CR_Date"] <= end_date) &
+        (df["Source Tank ID"] == tank)
+    ]
+
+def layout(dashapp):
+    return dbc.Col([
+        dbc.Label("Process and Performance mapping"),
+        dbc.Card([
+            dbc.Row([ ## Powered by Kai Chen
+                dbc.Label("Powered by Kai Chen"),
+            ], class_name='ms-auto'),
+            dbc.Row([ ## Choose Date - Date picker
+                dbc.Col(
+                    dbc.Label("Choose Date"),
+                    width=12, lg=3,
+                    class_name="d-flex align-items-center",
+                ),
+                dbc.Col(
+                    dmc.DateRangePicker(
+                        id='date-picker',
+                        minDate='2009-01-01',
+                        maxDate=(datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d'),
+                        value=[
+                            (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d'),
+                            (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+                        ],
+                        fullWidth=True
+                    ),
+                    width=12, lg=9
+                ),
+            ], class_name='mb-3'),
+            dbc.Row([ ## Choose Date - RadioItems
+                dbc.Col(
+                    dbc.Label(" "),
+                    width=12, lg=3,
+                    class_name="d-flex align-items-center",
+                ),
+                dbc.Col(
+                    dcc.RadioItems(
+                        id='date-shortcuts',
+                        options=[
+                            {'label': '-1 year', 'value': '1Y'},
+                            {'label': '-6 months', 'value': '6M'},
+                            {'label': '-3 months', 'value': '3M'},                            
+                            {'label': '-1 month', 'value': '1M'},
+                            {'label': '-7 days', 'value': '7D'},
+                            {'label': '-1 day', 'value': '1D'}
+                        ],
+                        value='7D',  
+                        labelStyle={'display': 'inline-block', 'margin-right': '10px'},
+                        inline=True,
+                        className="mb-3"
+                    ),
+                    width=12, lg=9
+                ),
+            ], class_name='mb-3'),
+            dbc.Row([ ## Choose Tank
+                dbc.Col(
+                    dbc.Label("Choose Tank"),
+                    width=12, lg=3,
+                    class_name="d-flex align-items-center",
+                ),
+                dbc.Col(
+                    dcc.Dropdown(
+                        id='tank-picker',
+                        options=all_options,
+                        value='TC01'
+                    ),
+                    width=12, lg=9
+                ),
+            ], class_name='mb-3'),
+            dbc.Row([ ## Choose Loss Type
+                dbc.Col(
+                    dbc.Label("Choose Loss Type"),
+                    width=12, lg=3,
+                    class_name="d-flex align-items-center",
+                ),
+                dbc.Col(
+                    dcc.Dropdown(
+                        id='loss-type',
+                        options=[
+                            {'label': 'Melting Loss', 'value': 'melting'},
+                            {'label': 'Finishing Loss', 'value': 'finishing'},
+                            {'label': 'Melting + Finishing loss', 'value': 'melting+finishing'},
+                            {'label': 'Pi Data Only', 'value': 'pi'}                            
+                        ],
+                        value='melting',  # 預設值為 melting
+                    ),
+                    width=12, lg=9
+                ),
+            ], class_name='mb-3'),
+            dbc.Row([ ## Choose Gen size
+                dbc.Col(
+                    dbc.Label("Choose Gen Size"),
+                    width=12, lg=3,
+                    class_name="d-flex align-items-center",
+                ),
+                dbc.Col(
+                    dcc.Dropdown(
+                        id="gen-picker",
+                        multi=True,  # 支持多選
+                        options=[],  # 初始為空，通過 callback 動態更新
+                        value=[]     # 初始值為空，通過 callback 動態更新
+                    ),
+                    width=12, lg=9
+                ),
+            ], class_name='mb-3'),
+            dbc.Row([ ## Choose thickness
+                dbc.Col(
+                    dbc.Label("Choose Thickness"),
+                    width=12, lg=3,
+                    class_name="d-flex align-items-center",
+                ),
+                dbc.Col(
+                    dcc.Dropdown(
+                        id="thickness-picker",
+                        multi=True,  # 支持多選
+                        options=[],  # 初始為空，通過 callback 動態更新
+                        value=[]     # 初始值為空，通過 callback 動態更新
+                    ),
+                    width=12, lg=9
+                ),
+            ], class_name='mb-3'),
+            dbc.Row([ ## Choose finishing line
+                dbc.Col(
+                    dbc.Label("Choose Finishing Line"),
+                    width=12, lg=3,
+                    class_name="d-flex align-items-center",
+                ),
+                dbc.Col(
+                    dcc.Dropdown(
+                        id="line-picker",
+                        multi=True,  # 支持多選
+                        options=[],  # 初始為空，通過 callback 動態更新
+                        value=[]     # 初始值為空，通過 callback 動態更新
+                    ),
+                    width=12, lg=9
+                ),
+            ], class_name='mb-3'),
+            dbc.Row([ ## Choose Defects
+                dbc.Col(
+                    dbc.Label("Choose Defects"),
+                    width=12, lg=3,
+                    class_name="d-flex align-items-center",
+                ),
+                dbc.Col(
+                    dcc.Dropdown(
+                        id="defect-picker",
+                        multi=True,  # 支持多選
+                        options=[],  # 初始為空，通過 callback 動態更新
+                        value=[]     # 初始值為空，通過 callback 動態更新
+                    ),
+                    width=12, lg=9
+                ),
+            ], class_name='mb-3'),
+            dbc.Row([ ## Choose Pi Data Interval
+                dbc.Col(
+                    dbc.Label("Choose Pi Data Interval"),
+                    width=12, lg=3,
+                    class_name="d-flex align-items-center",
+                ),
+                dbc.Col(
+                    dcc.RadioItems(
+                        id="interval",
+                        options=[
+                            {"label": "Daily", "value": "d"},
+                            {"label": "Hourly", "value": "h"},
+                            {"label": "5min", "value": "5m"},
+                            {"label": "1min", "value": "1m"},
+                            {"label": "5s", "value": "5s"}
+                        ],
+                        value="d",
+                        labelStyle={'display': 'inline-block', 'margin-right': '10px'},
+                        inline=True
+                    ),
+                    width=12, lg=9
+                ),
+            ], class_name='mb-3'),
+            dbc.Row([ ## Choose Pi Tags
+                dbc.Col(
+                    dbc.Label("Choose Pi Tags"),
+                    width=12, lg=3,
+                    class_name="d-flex align-items-center",
+                ),
+                dbc.Col(
+                    dcc.Dropdown(
+                        options=[],
+                        multi=True,
+                        id="tags",
+                        className="mb-3",
+                    ),
+                    width=12, lg=9
+                ),
+            ], class_name='mb-3'),
+            dbc.Row([ ## Choose Y axis setting
+                dbc.Col(
+                    dbc.Label("Choose Y Axis Setting"),
+                    width=12, lg=3,
+                    class_name="d-flex align-items-center",
+                ),
+                dbc.Col(
+                    dcc.RadioItems(
+                        id="pi-y-axis-setting",
+                        options=[
+                            {'label': 'Single', 'value': 'single'},
+                            {'label': 'Multiple', 'value': 'multiple'}
+                        ],
+                        value='multiple',  # 預設為 multiple 模式
+                        inline=True,
+                        labelStyle={'display': 'inline-block', 'margin-right': '10px'},
+                        style={'margin-bottom': '10px'}
+                    ),
+                    width=12, lg=9
+                ),
+            ], class_name='mb-3'),
+            dbc.Row([ ## Chart Display
+                dbc.Col(
+                    dbc.Label("Chart Display"),
+                    width=12, lg=3,
+                    class_name="d-flex align-items-center",
+                ),
+                dbc.Col(
+                    dcc.Loading(  # 添加加載進度條
+                        id="loading-graph",
+                        type="default",  # 可以設置為 "default" 或 "graph"
+                        children=[
+                            dcc.Graph(
+                                id="combined-graph",
+                                style={"height": "500px"},
+                            ),
+                        ],
+                    ),
+                    width=12, lg=9
+                ),
+            ], class_name='mb-3'),
+        ], class_name="dashboard p-3"),
+        dbc.Label("Multiple Y Chart"),
+        dbc.Card([
+            dbc.Row([ ## Primary Y-axis Tags
+                dbc.Col(
+                    dbc.Label("Primary Y-axis Tags"),
+                    width=12, lg=3,
+                    class_name="d-flex align-items-center",
+                ),
+                dbc.Col(
+                    dcc.Dropdown(
+                        id="priYtags_dropdown",
+                        multi=True,  # 支持多選
+                        options=[],  # 初始為空，通過 callback 動態更新
+                        value=[]     # 初始值為空，通過 callback 動態更新
+                    ),
+                    width=12, lg=9
+                ),
+            ], class_name='mb-3'),
+            dbc.Row([ ## Secondary Y-axis Tags
+                dbc.Col(
+                    dbc.Label("Secondary Y-axis Tags"),
+                    width=12, lg=3,
+                    class_name="d-flex align-items-center",
+                ),
+                dbc.Col(
+                    dcc.Dropdown(
+                        id="secYtags_dropdown",
+                        multi=True,  # 支持多選
+                        options=[],  # 初始為空，通過 callback 動態更新
+                        value=[]     # 初始值為空，通過 callback 動態更新
+                    ),
+                    width=12, lg=9
+                ),
+            ], class_name='mb-3'),
+            dbc.Row([ ## Chart size
+                dbc.Col(
+                    dbc.Label("Chart Width"),
+                    width=12, lg=3,
+                    class_name="d-flex align-items-center",
+                ),
+                dbc.Col(
+                    dbc.Input(id='chart_width', type="number", value=1100, min=10),
+                    width=12, lg=3
+                ),
+                dbc.Col(
+                    dbc.Label("Chart Height"),
+                    width=12, lg=3,
+                    class_name="d-flex align-items-center",
+                ),
+                dbc.Col(
+                    dbc.Input(id='chart_height', type="number", value=600, min=10),
+                    width=12, lg=3
+                ),
+            ], class_name='mb-3'),
+            dbc.Row([ ## Multiple Y Chart Display
+                dbc.Col(
+                    dbc.Label("Multiple Y Chart Display"),
+                    width=12, lg=3,
+                    class_name="d-flex align-items-center",
+                ),
+                dbc.Col(
+                    dcc.Graph(id="combined_mulY_graph"),
+                    width=12, lg=9
+                ),
+            ], class_name='mb-3'),
+        ], class_name="dashboard p-3"),
+        dcc.Store(id='filtered-data-melting', data=[]),  # 用於緩存 Melting Loss 資料
+        dcc.Store(id='filtered-data-finishing', data=[]),  # 用於緩存 Finishing Loss 資料
+    ])
+
+dashapp = Dash(__name__, external_stylesheets=[dbc.themes.BOOTSTRAP, dbc.icons.BOOTSTRAP])
+dashapp.layout = layout(dashapp)
+
+def callbacks(dashapp):
+    # 動態更新當前日期
+    @dashapp.callback(
+        Output('date-picker', 'maxDate'),
+        Input('date-picker', 'id')
+    )
+    def update_max_date(_):
+        return (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+
+    @dashapp.callback( #此PPD query data為即時更新gen size, thickness, Finishing line的選項用(只有finishing data需要)
+        Output("gen-picker", "options"),  # 更新 gen size 的選項
+        Output("thickness-picker", "options"),  # 更新 thickness 的選項
+        Output("line-picker", "options"),  # 更新 Finishing line 的選項
+        Output("gen-picker", "value"),  # 更新 gen size 的預設值
+        Output("thickness-picker", "value"),  # 更新 thickness 的預設值
+        Output("line-picker", "value"),  # 更新 Finishing line 的預設值
+        Input("date-picker", "value"),
+        Input("tank-picker", "value")
+    )
+    def query_data(date_range, tank):
+        if not date_range or not tank:
+            raise PreventUpdate
+        
+        start_date, end_date = map(pd.to_datetime, date_range)
+
+        query_f = f"""
+        SELECT NON EMPTY {{ [Measures].[F_Defect Loss%] }} ON COLUMNS, 
+            NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
+                            [Finishing Source Tank].[Source Tank ID].&[{tank}] *
+                            [FG Product].[FG_Gen].[FG_Gen].ALLMEMBERS * 
+                            [FG Product].[FG_Thickness].[FG_Thickness].ALLMEMBERS * 
+                            [Finishing Line].[Line ID].[Line ID].ALLMEMBERS) }} 
+            DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME
+        ON ROWS 
+        FROM ( 
+            SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
+                        [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
+            ON COLUMNS 
+        FROM ( 
+            SELECT ({{ [Production Type].[Production Type Hierarchy].[Lot Type／Scheduled].&[F-Normal], 
+                        [Production Type].[Production Type Hierarchy].[SubType].&[F-Div], 
+                        [Production Type].[Production Type Hierarchy].[SubType].&[F-Engineering], 
+                        [Production Type].[Production Type Hierarchy].[SubType].&[F-Plant] }}) 
+                        ON COLUMNS 
+            FROM [PPD_Actual]
+        ) )
+        WHERE ( [Time Crate].[CR_Date].CurrentMember ) 
+        CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
+        """
+
+        try:
+            # 數據清理
+            df_cleaned_F = clean_data(get_PPD(query_f))
+            # 獲取唯一的 Defect ID 選項
+            all_gen = df_cleaned_F["FG_Gen"].dropna().unique()
+            all_thickness = df_cleaned_F["FG_Thickness"].dropna().unique()
+            all_line = df_cleaned_F["Line ID"].dropna().unique()
+            gen_options = [{"label": gen, "value": gen} for gen in all_gen]
+            thickness_options = [{"label": thickness, "value": thickness} for thickness in all_thickness]
+            line_options = [{"label": line, "value": line} for line in all_line]
+            # 默認選中所有 Defect
+            gen_default = list(all_gen)
+            thickness_default = list(all_thickness)
+            line_default = list(all_line)
+
+            return gen_options, thickness_options, line_options, gen_default, thickness_default, line_default
+
+            
+        except Exception as e:
+            print("Error occurred during query execution:")
+            print(e)
+            return [], [], [], [], [], []
+        
+    # 這段是在把PPD的Line ID轉換成OLAP語法對應的line，如TCL101對應的是[Finishing Line].[Line ID].&[TC]&[L101],
+    # NL01對應的是[Finishing Line].[Line ID].&[KN]&[NL01]，因毫無邏輯所以需要個別處理
+    def format_line_id(line):
+        prefix_map = {
+        "TCL": "[TC]&[L",
+        "NL": "[KN]&[",
+        "CL": "[KC]&[",
+        "TNL": "[TN]&[L",
+        "HFL": "[HF]&[HF",
+        "CQL": "[CQ]&[L",
+        "BJL": "[BJ]&[L",
+        "WHL": "[WH]&[WH",
+        "SCL": "[SC]&[SC"
+    }
+        for prefix, format_str in prefix_map.items():
+            if line.startswith(prefix):
+                return f"[Finishing Line].[Line ID].&{format_str}{line[len(prefix):]}]"
+        return f"[Finishing Line].[Line ID].&[{line}]"
+
+
+    @dashapp.callback(  #此PPD query data為最後performance data畫圖用
+        Output("filtered-data-melting", "data"),
+        Output("filtered-data-finishing", "data"),
+        Input("date-picker", "value"),
+        Input("tank-picker", "value"),
+        Input("gen-picker", "value"),
+        Input("thickness-picker", "value"),
+        Input("line-picker", "value"),
+    )
+    def query_data(date_range, tank, gen, thickness, line): 
+        if not date_range or not tank:
+            raise PreventUpdate  
+
+        start_date, end_date = map(pd.to_datetime, date_range)
+
+        # 查詢 Melting Loss 
+        query_m = f"""
+            SELECT 
+                NON EMPTY {{ [Measures].[M_Defect Loss%] }} ON COLUMNS, 
+                NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
+                                [Finishing Source Tank].[Source Tank ID].&[{tank}] *
+                                [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
+                DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
+            ON ROWS 
+            FROM ( 
+                SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
+                            [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
+                ON COLUMNS 
+            FROM ( 
+                SELECT ({{ [Defect Tracking].[Defect ID].&[60],
+                            [Defect Tracking].[Defect ID].&[672],
+                            [Defect Tracking].[Defect ID].&[59],
+                            [Defect Tracking].[Defect ID].&[757],
+                            [Defect Tracking].[Defect ID].&[832],
+                            [Defect Tracking].[Defect ID].&[97],
+                            [Defect Tracking].[Defect ID].&[698],
+                            [Defect Tracking].[Defect ID].&[81],
+                            [Defect Tracking].[Defect ID].&[681] }}) 
+                ON COLUMNS 
+            FROM ( 
+                SELECT ({{ [Production Type].[Production Type Hierarchy].[Lot Type／Scheduled].&[M-Scheduled], 
+                            [Production Type].[Production Type Hierarchy].[SubType].&[F-Engineering] }}) 
+                            ON COLUMNS 
+                FROM [PPD_Actual]
+            ) ) ) 
+            CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
+        """
+        gen_condition = ", ".join([f"[FG Product].[FG_Gen].&[{float(gen):.1f}E2]" for gen in gen]) if gen else ""
+        gen_condition = gen_condition.strip("'")
+        thickness_condition = ", ".join([f"[FG Product].[FG_Thickness].&[{float(thickness):.1E}]" for thickness in thickness]) if thickness else ""
+        thickness_condition = thickness_condition.strip("'")
+        line_condition = ", ".join([format_line_id(line) for line in line]) if line else ""
+        line_condition = line_condition.strip("'")
+
+        # 查詢 Finishing Loss
+        query_f = f"""
+            SELECT NON EMPTY {{ [Measures].[F_Defect Loss%] }} ON COLUMNS, 
+                NON EMPTY {{ ([Time Crate].[CR_Time YQMD].[CR_Date].ALLMEMBERS * 
+                                [Finishing Source Tank].[Source Tank ID].&[{tank}] *
+                                [Defect Tracking].[Defect ID].[Defect ID].ALLMEMBERS) }} 
+                DIMENSION PROPERTIES MEMBER_CAPTION, MEMBER_UNIQUE_NAME 
+            ON ROWS 
+            FROM ( 
+                SELECT (
+                    {{ [Defect Tracking].[Defect ID].&[165], 
+                    [Defect Tracking].[Defect ID].&[1028], 
+                    [Defect Tracking].[Defect ID].&[311], 
+                    [Defect Tracking].[Defect ID].&[252], 
+                    [Defect Tracking].[Defect ID].&[407], 
+                    [Defect Tracking].[Defect ID].&[171], 
+                    [Defect Tracking].[Defect ID].&[838], 
+                    [Defect Tracking].[Defect ID].&[169], 
+                    [Defect Tracking].[Defect ID].&[836], 
+                    [Defect Tracking].[Defect ID].&[167], 
+                    [Defect Tracking].[Defect ID].&[834], 
+                    [Defect Tracking].[Defect ID].&[170], 
+                    [Defect Tracking].[Defect ID].&[837], 
+                    [Defect Tracking].[Defect ID].&[168], 
+                    [Defect Tracking].[Defect ID].&[835] }} 
+            ) ON COLUMNS 
+            FROM ( 
+                SELECT ({{ [Time Crate].[CR_Date].&[{start_date.strftime("%Y-%m-%dT00:00:00")}] : 
+                            [Time Crate].[CR_Date].&[{end_date.strftime("%Y-%m-%dT00:00:00")}] }}) 
+                ON COLUMNS 
+            FROM ( 
+                SELECT ({{ [Production Type].[Production Type Hierarchy].[Lot Type／Scheduled].&[F-Normal], 
+                            [Production Type].[Production Type Hierarchy].[SubType].&[F-Div], 
+                            [Production Type].[Production Type Hierarchy].[SubType].&[F-Engineering], 
+                            [Production Type].[Production Type Hierarchy].[SubType].&[F-Plant] }}) 
+                            ON COLUMNS 
+            FROM ( 
+                SELECT ({{ {gen_condition} }})
+                ON COLUMNS
+            FROM ( 
+                SELECT ({{ {thickness_condition} }})
+                ON COLUMNS
+                    FROM ( 
+                SELECT ({{ {line_condition} }})
+                ON COLUMNS
+                FROM [PPD_Actual]
+            ) ) ) ) ) )
+            
+            CELL PROPERTIES VALUE, BACK_COLOR, FORE_COLOR, FORMATTED_VALUE, FORMAT_STRING, FONT_NAME, FONT_SIZE, FONT_FLAGS
+        """
+        # 分別處理每個查詢
+        melting_data = []
+        finishing_data = []
+
+        try:
+            df_cleaned_M = clean_data(get_PPD(query_m))
+            melting_data = df_cleaned_M.to_dict("records")
+        except Exception as e:
+            print(f"Melting Loss query failed: {e}")
+
+        try:
+            df_cleaned_F = clean_data(get_PPD(query_f))
+            finishing_data = df_cleaned_F.to_dict("records")
+        except Exception as e:
+            print(f"Finishing Loss query failed: {e}")
+
+        return melting_data, finishing_data
+
+    @dashapp.callback(
+        Output('date-picker', 'value'),
+        Input('date-shortcuts', 'value')
+    )
+    def update_datepicker(selected_period):
+        today = datetime.today()
+        dic = {
+            '1Y': 365,
+            '6M': 182,
+            '3M': 90,
+            '1M': 30,
+            '7D': 7,
+            '1D': 0
+        }
+
+        start_date = today - timedelta(days=dic[selected_period])
+        end_date = today + timedelta(days=1)
+
+        return [start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')]
+
+    @dashapp.callback(
+        Output("defect-picker", "options"),  # 更新 defect-picker 的選項
+        Output("defect-picker", "value"),  # 更新 defect-picker 的預設值
+        Input("loss-type", "value"),         # 當 loss-type 改變時觸發
+        Input("tank-picker", "value"),       # 當 tank 改變時也觸發
+        Input("date-picker", "value"),      # 當日期範圍改變時觸發
+        Input("filtered-data-melting", "data"),  # 輸入 melting 數據
+        Input("filtered-data-finishing", "data")  # 輸入 finishing 數據
+    )
+    def update_defect_picker(loss_type, tank, date_range, data_melting, data_finishing):
+        if not date_range or len(date_range) != 2 or not tank:
+            return [], []  # 如果輸入不完整，返回空選項和清空選擇
+
+        start_date, end_date = map(pd.to_datetime, date_range)
+
+        # 將輸入的字典格式數據轉換為 DataFrame
+        if data_melting:
+            df_cleaned_M = pd.DataFrame(data_melting)
+            df_cleaned_M["CR_Date"] = pd.to_datetime(df_cleaned_M["CR_Date"], errors="coerce")
+        else:
+            df_cleaned_M = pd.DataFrame()
+
+        if data_finishing:
+            df_cleaned_F = pd.DataFrame(data_finishing)
+            df_cleaned_F["CR_Date"] = pd.to_datetime(df_cleaned_F["CR_Date"], errors="coerce")
+        else:
+            df_cleaned_F = pd.DataFrame()
+
+        # 檢查資料是否存在
+        if df_cleaned_M.empty and df_cleaned_F.empty:
+            return [], []  # 如果沒有資料，返回空選項和清空選擇
+
+        # 根據 loss_type 合併數據
+        if loss_type == 'melting+finishing':
+            filtered_df_melting = df_cleaned_M[
+                (df_cleaned_M["Source Tank ID"] == tank) &
                 (df_cleaned_M["CR_Date"] >= start_date) &
-                (df_cleaned_M["CR_Date"] <= end_date) &
-                (df_cleaned_M["Tank ID"] == tank)
+                (df_cleaned_M["CR_Date"] <= end_date)
+            ]
+            filtered_df_finishing = df_cleaned_F[
+                (df_cleaned_F["Source Tank ID"] == tank) &
+                (df_cleaned_F["CR_Date"] >= start_date) &
+                (df_cleaned_F["CR_Date"] <= end_date)
+            ]
+            filtered_df = pd.concat([filtered_df_melting, filtered_df_finishing])
+        elif loss_type == 'melting':
+            filtered_df = df_cleaned_M[
+                (df_cleaned_M["Source Tank ID"] == tank) &
+                (df_cleaned_M["CR_Date"] >= start_date) &
+                (df_cleaned_M["CR_Date"] <= end_date)
             ]
         elif loss_type == 'finishing':
             filtered_df = df_cleaned_F[
+                (df_cleaned_F["Source Tank ID"] == tank) &
                 (df_cleaned_F["CR_Date"] >= start_date) &
-                (df_cleaned_F["CR_Date"] <= end_date) &
-                (df_cleaned_F["Tank ID"] == tank)
+                (df_cleaned_F["CR_Date"] <= end_date)
             ]
-        elif loss_type == 'melting+finishing':
-            filtered_df_melting = df_cleaned_M[
-                (df_cleaned_M["CR_Date"] >= start_date) &
-                (df_cleaned_M["CR_Date"] <= end_date) &
-                (df_cleaned_M["Tank ID"] == tank)
-            ]
-            filtered_df_finishing = df_cleaned_F[
-                (df_cleaned_F["CR_Date"] >= start_date) &
-                (df_cleaned_F["CR_Date"] <= end_date) &
-                (df_cleaned_F["Tank ID"] == tank)
-            ]
-            filtered_df = pd.concat([filtered_df_melting, filtered_df_finishing])
-    else:
-        return fig  # 如果 loss_type 無效，返回空圖表
-        # 繪製 Defect
-    if defect:
-        final_df = filtered_df[filtered_df['Defect ID'].isin(defect)]
-        for selected_defect in defect:
-            df_defect = final_df[final_df['Defect ID'] == selected_defect]
-            loss_column = (
-                "M_Defect Loss%" if selected_defect in df_cleaned_M["Defect ID"].unique()
-                else "F_Defect Loss%"
-            )
-            fig.add_trace(go.Bar(
-                x=df_defect["CR_Date"],
-                y=df_defect[loss_column],
-                name=selected_defect,
-                marker_color=defect_colors.get(selected_defect)
-            ))
-        fig.update_layout(barmode='stack')
-    else:
-        pass
+        else:
+            return [], []
 
+        # 獲取唯一的 Defect ID 選項
+        all_defects = filtered_df["Defect ID"].dropna().unique()
+        defect_options = [{"label": defect, "value": defect} for defect in all_defects]
+        # 默認選中所有 Defect
+        default_values = list(all_defects)
 
-    # 如果有選擇 PI tags 且有日期範圍，則提取並繪製 PI 數據
-    if tags and start_date and end_date:
-        servername = "grape"  # 設定 PI 伺服器名稱
+        return defect_options, default_values
+
+    @dashapp.callback(
+        Output("tags", "options"), 
+        Input("tank-picker", "value")
+    )
+    def update_tags_options(Tank_ID):
+        if Tank_ID.startswith('TC'):
+            servername = 'grape'
+        else:
+            servername = 'plum'  # TN PI server name
         with PI.PIServer(server=servername) as server:
-            points = server.search(tags)  # 搜尋所選的 PI tags
-            if len(points) > 0:
-                series = []
-                for p in points:
-                    # 使用選擇的頻率取樣數據
-                    sampling_interval = '30m'  # 默認為 30 分鐘
-                    if interval == 'd':
-                        sampling_interval = '30m'
-                    elif interval == 'h':
-                        sampling_interval = '30m'
-                    elif interval == '5m':
-                        sampling_interval = '5m'  # 若選擇 "5m" 則設置為 5 分鐘
-                    elif interval == '1m':
-                        sampling_interval = '1m'  # 若選擇 "1m" 則設置為 1 分鐘
+            points = server.search(f'*T{Tank_ID}*')
+            pi_tags = [p.name for p in points]
 
-                    data = p.interpolated_values(
-                        start_time=start_date,
-                        end_time=end_date,
-                        interval=sampling_interval
-                    )
-                    
-                    # 將數據轉換為 DataFrame 並重新設置索引
-                    interpolated_data = pd.DataFrame(data).reset_index()
-                    interpolated_data.columns = ['Timestamp', p.name]
-                    
-                    # 將非數字型資料轉換為 None
-                    def convert_to_numeric(val):
-                        try:
-                            return float(val)
-                        except (ValueError, TypeError):
-                            return None  # 如果無法轉換，返回 None
-                    
-                    interpolated_data[p.name] = interpolated_data[p.name].apply(convert_to_numeric)
-                    interpolated_data['Timestamp'] = pd.to_datetime(interpolated_data['Timestamp'])
-                    interpolated_data.set_index('Timestamp', inplace=True)
+        return pi_tags
 
-                    # 根據使用者選擇的 interval 將數據重新取樣
-                    if interval == 'd':  # 若選擇每日資料
-                        resampled_data = interpolated_data.resample('1D').mean()
-                    elif interval == 'h':  # 若選擇每小時資料
-                        resampled_data = interpolated_data.resample('1H').mean()
-                    elif interval == '5m':  # 若選擇5m資料
-                        resampled_data = interpolated_data.resample('5min').mean()
-                    else:  # 否則1m
-                        resampled_data = interpolated_data
+    @dashapp.callback(
+        Output("combined-graph", "figure"),
+        Input("tags", "value"),
+        Input("date-picker", "value"),
+        Input("interval", "value"),
+        Input("tank-picker", "value"),
+        Input("loss-type", "value"),
+        Input("defect-picker", "value"),
+        Input("pi-y-axis-setting", "value"),  # 新增 Y 軸模式輸入
+        Input("filtered-data-melting", "data"),  # 輸入 Melting 數據
+        Input("filtered-data-finishing", "data")  # 輸入 Finishing 數據
+    )
+    def update_combined_graph(tags, date_range, interval, tank, loss_type, defect, pi_y_axis_mode, data_melting, data_finishing):
+        fig = go.Figure()
 
-                    series.append(resampled_data)  # 將每個 Tag 的數據加入 series 清單
+        if not date_range or len(date_range) != 2 or not tank:
+            raise PreventUpdate  # 如果輸入條件不足，則不更新圖表
+            # 檢查資料是否存在
 
-                # 合併所有 PI tags 數據
-                df = pd.concat(series, axis=1)
+        start_date, end_date = map(pd.to_datetime, date_range)
 
-                # 設定顏色循環，避免顏色數量限制
-                color_idx = 0
-                for idx, tag in enumerate(tags):
-                    if tag in df.columns:
-                        # 判斷 defect 是否為空
-                        if not defect:
-                            # 無選擇 defect：第一個 tag 使用主 Y 軸，其餘 tags 疊加到額外 Y 軸
-                            # 添加 Y 軸設置根據選擇切換
-                            if pi_y_axis_mode == 'single':
-                                fig.add_trace(go.Scatter(
-                                    x=df.index,
-                                    y=df[tag],
-                                    mode='lines',
-                                    name=tag,
-                                    line=dict(color=color_palette[color_idx % len(color_palette)]),
-                                    yaxis='y2',  # 主 Y 軸
-                                ))
-                                fig.update_layout(
-                                    yaxis2=dict(
-                                    side='right',
-                                    position=1,
-                                    tickfont=dict(color='black'),
-                                ))
-                            elif pi_y_axis_mode == 'multiple':
-                                if idx == 0:
-                                    fig.add_trace(go.Scatter(
-                                        x=df.index,
-                                        y=df[tag],
-                                        mode='lines',
-                                        name=tag,
-                                        line=dict(color=color_palette[color_idx % len(color_palette)]),
-                                        yaxis='y',  # 主 Y 軸
-                                    ))
-                                    fig.update_layout(yaxis=dict(
-                                            title=tag,
-                                            side='right',
-                                            position=1,
-                                            titlefont=dict(color=color_palette[color_idx % len(color_palette)]),
-                                            tickfont=dict(color=color_palette[color_idx % len(color_palette)]),
-                                        ))
-                                else:
-                                    fig.add_trace(go.Scatter(
-                                        x=df.index,
-                                        y=df[tag],
-                                        mode='lines',
-                                        name=tag,
-                                        line=dict(color=color_palette[color_idx % len(color_palette)]),
-                                        yaxis=f'y{idx+1}',  # 額外 Y 軸
-                                    ))
-                                    fig.update_layout(
-                                        **{f'yaxis{idx+1}': dict(
-                                            overlaying='y',  # 疊加到主 Y 軸
-                                            side='right' ,
-                                            position=0.96 - 0.04 * (idx - 1),  # 計算位置
-                                            titlefont=dict(color=color_palette[color_idx % len(color_palette)]),
-                                            tickfont=dict(color=color_palette[color_idx % len(color_palette)]),
-                                        )})
-                        else:
-                            if pi_y_axis_mode == 'single':
-                                fig.add_trace(go.Scatter(
-                                    x=df.index,
-                                    y=df[tag],
-                                    mode='lines',
-                                    name=tag,
-                                    line=dict(color=color_palette[color_idx % len(color_palette)]),
-                                    yaxis='y2',  # 主 Y 軸
-                                ))
-                                fig.update_layout(
-                                    yaxis2=dict(
-                                    overlaying='y',
-                                    side='right',
-                                    position=1,
-                                    tickfont=dict(color='black'),
-                                ))
-                            elif pi_y_axis_mode == 'multiple':                           
-                                # 有選擇 defect：所有 tags 疊加到額外 Y 軸
-                                fig.add_trace(go.Scatter(
-                                    x=df.index,
-                                    y=df[tag],
-                                    mode='lines',
-                                    name=tag,
-                                    line=dict(color=color_palette[color_idx % len(color_palette)]),
-                                    yaxis=f'y{idx+2}',  # 額外 Y 軸
-                                ))
-                                fig.update_layout(
-                                    **{f'yaxis{idx+2}': dict(
-                                        overlaying='y',  # 疊加到主 Y 軸
-                                        side='right',
-                                        position=1 - 0.04 * idx,  # 計算位置
-                                        titlefont=dict(color=color_palette[color_idx % len(color_palette)]),
-                                        tickfont=dict(color=color_palette[color_idx % len(color_palette)]),
-                                    )}
-                                )
-                        color_idx += 1  # 更新顏色索引
+        #在loss type為pi data only下，什麼都不選會秀一張標題為process chart的空圖，而不是No loss data available on PPD for the selected period
+        if not data_melting and not data_finishing and not tags and loss_type != 'pi':
+            fig.add_annotation(
+                text=f"No loss data available on PPD for the selected period\n({start_date} to {end_date})",
+                xref="paper", yref="paper",
+                x=0.5, y=0.5, showarrow=False,
+                font=dict(size=15)
+            )
+            return fig
 
-    # 計算總共的 Y 軸數量
-    total_y_axes = len(tags) if tags else 1  # 預設至少有主 Y 軸
+        # 將輸入的字典格式數據轉換為 DataFrame
+        df_cleaned_M, df_cleaned_F = pd.DataFrame(), pd.DataFrame()
+        if data_melting:
+            df_cleaned_M = pd.DataFrame(data_melting)
+            df_cleaned_M["CR_Date"] = pd.to_datetime(df_cleaned_M["CR_Date"], errors="coerce")        
+        if data_finishing:
+            df_cleaned_F = pd.DataFrame(data_finishing)
+            df_cleaned_F["CR_Date"] = pd.to_datetime(df_cleaned_F["CR_Date"], errors="coerce")
+        
+        # 根據 loss_type 合併數據
+        if loss_type == 'melting':
+            filtered_df = filter_df(df_cleaned_M, start_date, end_date, tank)
+        elif loss_type == 'finishing':
+            filtered_df = filter_df(df_cleaned_F, start_date, end_date, tank)
+        elif loss_type == 'melting+finishing':
+            filtered_df_melting = filter_df(df_cleaned_M, start_date, end_date, tank)
+            filtered_df_finishing = filter_df(df_cleaned_F, start_date, end_date, tank)
+            filtered_df = pd.concat([filtered_df_melting, filtered_df_finishing])
 
-    # 動態調整 X 軸 domain（減少退縮範圍）
-    x_domain_end = 1 if pi_y_axis_mode == 'single' else 1- ((total_y_axes - 1) * 0.04) 
+        #在loss type為pi data only下，不繪製defect
+        if defect and loss_type != 'pi':
+            final_df = filtered_df[filtered_df['Defect ID'].isin(defect)]
+            defect = sorted(defect, key=lambda v: defect_order[v])
+            for selected_defect in defect:
+                marker_pattern_shape = "x" if selected_defect in ['Inclusion', 'Melt Blister', 'Cord', 'PM Melting'] else ""
+                df_defect = final_df[final_df['Defect ID'] == selected_defect]
+                loss_column = (
+                    "M_Defect Loss%" if selected_defect in df_cleaned_M["Defect ID"].unique()
+                    else "F_Defect Loss%"
+                )
+                fig.add_trace(go.Bar(
+                    x=df_defect["CR_Date"],
+                    y=df_defect[loss_column],
+                    name=selected_defect,
+                    marker_color=defect_colors.get(selected_defect),
+                    marker_pattern_shape=marker_pattern_shape
+                ))
+            fig.update_layout(barmode='stack')
 
-    # 更新圖表的佈局和標題
-    fig.update_layout(
-        showlegend=True,
-        title=dict(
-            text=f'{tank} Inclusion loss and Process Chart' if defect else f'{tank} Process Chart',
-            automargin=True
+        # 如果有選擇 PI tags 且有日期範圍，則提取並繪製 PI 數據
+        if tags and start_date and end_date:
+            if tank.startswith('TC'):
+                servername = 'grape'
+            else:
+                servername = 'plum'  # TN PI server name
+            with PI.PIServer(server=servername) as server:
+                points = server.search(tags)  # 搜尋所選的 PI tags
+                if len(points) > 0:
+                    series = []
+                    for p in points:
+                        # 使用選擇的頻率取樣數據
+                        sample_interval_dic = {'d': '30m', 'h': '30m', '5m': '5m', '1m': '1m' , '5s': '5s'}
+                        data = p.interpolated_values(
+                            start_time=start_date,
+                            end_time=end_date,
+                            interval=sample_interval_dic[interval]
+                        )
+                        
+                        # 將數據轉換為 DataFrame 並重新設置索引
+                        interpolated_data = pd.DataFrame(data).reset_index()
+                        interpolated_data.columns = ['Timestamp', p.name]
+                        interpolated_data = interpolated_data[pd.to_numeric(interpolated_data[p.name], errors='coerce').notnull()]
+                        interpolated_data['Timestamp'] = pd.to_datetime(interpolated_data['Timestamp'])
+                        interpolated_data.set_index('Timestamp', inplace=True)
+
+                        # 根據使用者選擇的 interval 將數據重新取樣
+                        resample_interval_dic = {'d': '1D', 'h': '1h', '5m': '5min', '1m': '1min', '5s': '5s'}
+                        resampled_data = interpolated_data.resample(resample_interval_dic[interval]).mean()
+
+                        series.append(resampled_data)  # 將每個 Tag 的數據加入 series 清單
+
+                    # 合併所有 PI tags 數據
+                    df = pd.concat(series, axis=1)
+
+                    # 設定顏色循環，避免顏色數量限制
+                    for idx, tag in enumerate(tags):
+                        if tag not in df.columns:
+                            continue
+
+                        position = 1 if pi_y_axis_mode == 'single' else 1 - 0.04 * idx
+                        font_color = 'black' if pi_y_axis_mode == 'single' else color_palette[idx % len(color_palette)]
+
+                        y_idx_nd = '' if idx == 0 else idx+1
+                        y_idx_nd = 2 if pi_y_axis_mode == 'single' else y_idx_nd
+                        y_idx_d = 2 if pi_y_axis_mode == 'single' else idx+2
+                        y_idx = y_idx_d if defect else y_idx_nd
+                        
+                        fig.add_trace(go.Scatter(
+                            x=df.index,
+                            y=df[tag],
+                            mode='lines',
+                            name=tag,
+                            line=dict(color=color_palette[idx % len(color_palette)]),
+                            yaxis=f'y{y_idx}',  # 主 Y 軸
+                        ))
+                        fig.update_layout(**{
+                            f'yaxis{y_idx}': dict(
+                                side='right',
+                                position=position,
+                                titlefont=dict(color=font_color),
+                                tickfont=dict(color=font_color),
+                            )
+                        })
+                        
+                        if defect or (pi_y_axis_mode == 'multiple' and idx != 0):
+                            fig.update_layout(**{f'yaxis{y_idx}': dict(overlaying='y')})
+        
+        # 計算總共的 Y 軸數量
+        total_y_axes = len(tags) if tags else 1  # 預設至少有主 Y 軸
+
+        # 動態調整 X 軸 domain（減少退縮範圍）
+        x_domain_end = 1 if pi_y_axis_mode == 'single' else 1- ((total_y_axes - 1) * 0.04) 
+
+        # 更新圖表的佈局和標題
+        fig.update_layout(
+            showlegend=True,
+            title=dict(
+                text=f'<B>{tank} Inclusion loss and Process Chart</B>' if defect else f'<B>{tank} Process Chart</B>',
+                automargin=True,
+                font_size=18
             ),
-        xaxis=dict(
-            domain=[0, x_domain_end],  # 動態設定 X 軸的 domain 範圍
-            tickformat='%Y-%m-%d\n%H:%M:%S',
-            title='Date'
-        ),
-        yaxis=dict(tickformat='.1%', title='loss%') if defect else dict(tickformat='f', title='Value'),
-        height=550,
-        margin=dict(
-            b=0, 
-            l=0, 
-            r=90 + (total_y_axes / 3) * 30,  # 動態增加右邊邊距，避免軸標題擁擠
-            t=0  # 頂部邊距根據 defect 數量動態調整
-        ),
-        dragmode='zoom',
-        legend=dict(
-            orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1
-        ),
+            title_x=0.5,
+            xaxis=dict(
+                domain=[0, x_domain_end],  # 動態設定 X 軸的 domain 範圍
+                tickformat='%Y-%m-%d\n%H:%M:%S',
+            ),
+            yaxis=dict(tickformat='.1%', title='loss%') if defect else dict(tickformat='f', title='Value'),
+            # height=550,
+            margin=dict(
+                b=0, 
+                l=0, 
+                r=90 + (total_y_axes / 3) * 30,  # 動態增加右邊邊距，避免軸標題擁擠
+                t=0  # 頂部邊距根據 defect 數量動態調整
+            ),
+            dragmode='zoom',
+            legend=dict(orientation="h", yanchor="bottom", x=1, y=1.02, xanchor="right", font_size=12,),
         )
 
-    return fig  # 回傳更新後的圖表
+        return fig  # 回傳更新後的圖表
 
+    # Multiple Y Chart
+    @dashapp.callback(
+        Output("priYtags_dropdown", "options", allow_duplicate=True),
+        Output("priYtags_dropdown", "value", allow_duplicate=True),
+        Output("secYtags_dropdown", "options", allow_duplicate=True),
+        Output("secYtags_dropdown", "value", allow_duplicate=True),
+        Input("tags", "value"),
+        Input("priYtags_dropdown", "value"),
+        Input("secYtags_dropdown", "value"),
+        prevent_initial_call=True
+    )
+    def update_priYsecY_circular_callback(tags, priYtags, secYtags):
+        if not isinstance(tags, list):
+            if tags is not None:
+                tags = [tags]
+            else:
+                tags = []
+        if not isinstance(priYtags, list):
+            if priYtags is not None:
+                priYtags = [priYtags]
+            else:
+                priYtags = []
+        if not isinstance(secYtags, list):
+            if secYtags is not None:
+                secYtags = [secYtags]
+            else:
+                secYtags = []
+
+        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
+        if trigger_id == 'tags':
+            priYtags = tags
+            secYtags = []
+        elif trigger_id == 'priYtags_dropdown':    
+            secYtags = [i for i in tags if i not in priYtags]
+        elif trigger_id == 'secYtags_dropdown':
+            priYtags = [i for i in tags if i not in secYtags]
+        
+        return priYtags, priYtags, secYtags, secYtags
+
+    @dashapp.callback(
+        Output("combined_mulY_graph", "figure"),
+        Input("priYtags_dropdown", "value"),
+        Input("secYtags_dropdown", "value"),
+        Input("date-picker", "value"),
+        Input("interval", "value"),
+        Input("tank-picker", "value"),
+        Input("loss-type", "value"),
+        Input("defect-picker", "value"),
+        Input("pi-y-axis-setting", "value"),  # 新增 Y 軸模式輸入
+        Input("filtered-data-melting", "data"),  # 輸入 Melting 數據
+        Input("filtered-data-finishing", "data"),  # 輸入 Finishing 數據
+        Input("chart_width", "value"),
+        Input("chart_height", "value")
+    )
+    def update_mulY_chart(priYtags, secYtags, date_range, interval, tank, loss_type, defect, pi_y_axis_mode, data_melting, data_finishing, chart_width, chart_height):
+        if not date_range or len(date_range) != 2 or not tank:
+            raise PreventUpdate  # 如果輸入條件不足，則不更新圖表
+            # 檢查資料是否存在
+        
+        yaxis_cnts = max(len(priYtags), len(secYtags)) + (1 if defect else 0)
+        if not yaxis_cnts:
+            raise PreventUpdate
+
+        fig = make_subplots(
+            rows=yaxis_cnts, cols=1,
+            shared_xaxes=True,
+            vertical_spacing=0.02,
+            specs=[[{"secondary_y": True}] for _ in range(yaxis_cnts)]
+        )
+
+        if not data_melting and not data_finishing:
+            fig.add_annotation(
+                text="No data available for the selected period (Cold Repair)",
+                xref="paper", yref="paper",
+                x=0.5, y=0.5, showarrow=False,
+                font=dict(size=20)
+            )
+            return fig
+
+        start_date, end_date = map(pd.to_datetime, date_range)
+
+        # 將輸入的字典格式數據轉換為 DataFrame
+        df_cleaned_M, df_cleaned_F = pd.DataFrame(), pd.DataFrame()
+        if data_melting:
+            df_cleaned_M = pd.DataFrame(data_melting)
+            df_cleaned_M["CR_Date"] = pd.to_datetime(df_cleaned_M["CR_Date"], errors="coerce")        
+        if data_finishing:
+            df_cleaned_F = pd.DataFrame(data_finishing)
+            df_cleaned_F["CR_Date"] = pd.to_datetime(df_cleaned_F["CR_Date"], errors="coerce")
+
+        # 根據 loss_type 合併數據
+        if loss_type == 'melting':
+            filtered_df = filter_df(df_cleaned_M, start_date, end_date, tank)
+        elif loss_type == 'finishing':
+            filtered_df = filter_df(df_cleaned_F, start_date, end_date, tank)
+        elif loss_type == 'melting+finishing':
+            filtered_df_melting = filter_df(df_cleaned_M, start_date, end_date, tank)
+            filtered_df_finishing = filter_df(df_cleaned_F, start_date, end_date, tank)
+            filtered_df = pd.concat([filtered_df_melting, filtered_df_finishing])
+
+        if defect:
+            final_df = filtered_df[filtered_df['Defect ID'].isin(defect)]
+            defect = sorted(defect, key=lambda v: defect_order[v])
+            for selected_defect in defect:
+                marker_pattern_shape = "x" if selected_defect in ['Inclusion', 'Melt Blister', 'Cord', 'PM Melting'] else ""
+                df_defect = final_df[final_df['Defect ID'] == selected_defect].copy()
+                df_defect["CR_Date"] = pd.to_datetime(df_defect["CR_Date"]).dt.strftime('%Y-%m-%d\n%H:%M')
+                loss_column = (
+                    "M_Defect Loss%" if selected_defect in df_cleaned_M["Defect ID"].unique()
+                    else "F_Defect Loss%"
+                )
+                fig.add_trace(
+                    go.Bar(
+                        x=df_defect["CR_Date"],
+                        y=df_defect[loss_column],
+                        name=selected_defect,
+                        marker_color=defect_colors.get(selected_defect),
+                        marker_pattern_shape=marker_pattern_shape
+                    ),
+                    row=yaxis_cnts, col=1
+                )
+
+            fig.update_layout(barmode='stack')
+            fig.update_yaxes(
+                title_text="Loss%", 
+                row=yaxis_cnts, col=1,
+                secondary_y=False,
+            )
+
+        # 如果有選擇 PI tags 且有日期範圍，則提取並繪製 PI 數據
+        if (priYtags or secYtags) and start_date and end_date:
+            if tank.startswith('TC'):
+                servername = 'grape'
+            else:
+                servername = 'plum'  # TN PI server name
+            with PI.PIServer(server=servername) as server:
+                points = server.search(priYtags + secYtags)  # 搜尋所選的 PI tags
+                if len(points) > 0:
+                    series = []
+                    for p in points:
+                        # 使用選擇的頻率取樣數據
+                        sample_interval_dic = {'d': '30m', 'h': '30m', '5m': '5m', '1m': '1m'}
+                        data = p.interpolated_values(
+                            start_time=start_date,
+                            end_time=end_date,
+                            interval=sample_interval_dic[interval]
+                        )
+
+                        # 將數據轉換為 DataFrame 並重新設置索引
+                        interpolated_data = pd.DataFrame(data).reset_index()
+                        interpolated_data.columns = ['Timestamp', p.name]
+                        interpolated_data = interpolated_data[pd.to_numeric(interpolated_data[p.name], errors='coerce').notnull()]
+                        interpolated_data['Timestamp'] = pd.to_datetime(interpolated_data['Timestamp'])
+                        interpolated_data.set_index('Timestamp', inplace=True)
+
+                        # 根據使用者選擇的 interval 將數據重新取樣
+                        resample_interval_dic = {'d': '1D', 'h': '1h', '5m': '5min', '1m': '1min'}
+                        resampled_data = interpolated_data.resample(resample_interval_dic[interval]).mean()
+
+                        series.append(resampled_data)  # 將每個 Tag 的數據加入 series 清單
+
+                    # 合併所有 PI tags 數據
+                    df = pd.concat(series, axis=1)
+                    df.reset_index(inplace=True)
+
+                    # 設定顏色循環，避免顏色數量限制
+                    for i, tag in enumerate(priYtags):
+                        if tag not in df.columns:
+                            continue
+                        color = color_palette[i % len(color_palette)]
+                        fig.add_trace(
+                            go.Scatter(
+                                x=df['Timestamp'],
+                                y=df[tag],
+                                mode='lines',
+                                name=tag.replace(f'T{tank}_', '').replace(f'T{tank}', ''),
+                                line=dict(color=color),
+                            ),
+                            row=i+1, col=1, secondary_y=False
+                        )
+                        fig.update_yaxes(
+                            title_text=tag.replace(f'T{tank}_', '').replace(f'T{tank}', ''), 
+                            row=i+1, col=1, 
+                            secondary_y=False,
+                            titlefont=dict(color=color),
+                            tickfont=dict(color=color),
+                        )
+                    for j, tag in enumerate(secYtags):
+                        if tag not in df.columns:
+                            continue
+                        color = color_palette[len(priYtags) + j % len(color_palette)]
+                        fig.add_trace(
+                            go.Scatter(
+                                x=df['Timestamp'],
+                                y=df[tag],
+                                mode='lines',
+                                name=tag.replace(f'T{tank}_', '').replace(f'T{tank}', ''),
+                                line=dict(color=color),
+                            ),
+                            row=j+1, col=1, secondary_y=True
+                        )
+                        fig.update_yaxes(
+                            title_text=tag.replace(f'T{tank}_', '').replace(f'T{tank}', ''), 
+                            row=j+1, col=1, 
+                            secondary_y=True,
+                            titlefont=dict(color=color),
+                            tickfont=dict(color=color),
+                        )
+
+        fig.update_layout(
+            title=dict(
+                text=f'<B>{tank} Inclusion loss and Process Chart' if defect else f'{tank} Process Chart</B>',
+                automargin=True,
+                font_size=18
+            ),
+            title_x=0.5,
+            showlegend=True,
+            width=chart_width, height=chart_height,
+            legend=dict(orientation="h", yanchor="bottom", x=1, y=1.02, xanchor="right", font_size=12,),
+        )
+        fig.update_xaxes(tickformat='%Y-%m-%d\n%H:%M:%S', row=yaxis_cnts, col=1)
+
+        return fig
 
 if __name__ == '__main__':
-    app.run_server(debug=True, port='8888')
+    callbacks(dashapp)
+    dashapp.run_server(debug=True, port='8888')
