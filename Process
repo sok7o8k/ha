@@ -983,16 +983,25 @@ def callbacks(dashapp):
             specs=[[{"secondary_y": True}] for _ in range(yaxis_cnts)]
         )
 
-        if not data_melting and not data_finishing:
+        start_date, end_date = map(pd.to_datetime, date_range)
+
+        if (
+            (loss_type == "melting" and not data_melting)
+            or (loss_type == "finishing" and not data_finishing)
+            or (loss_type == "melting+finishing" and (not data_melting and not data_finishing))
+        ):
             fig.add_annotation(
-                text="No data available for the selected period (Cold Repair)",
+                text=(
+                    f"No data available for the selected period<br>"
+                    f"({start_date.strftime('%Y/%m/%d')} ~ {end_date.strftime('%Y/%m/%d')})"
+                ),
                 xref="paper", yref="paper",
                 x=0.5, y=0.5, showarrow=False,
-                font=dict(size=20)
+                font=dict(size=20),
             )
             return fig
 
-        start_date, end_date = map(pd.to_datetime, date_range)
+        
 
         # 將輸入的字典格式數據轉換為 DataFrame
         df_cleaned_M, df_cleaned_F = pd.DataFrame(), pd.DataFrame()
