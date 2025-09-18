@@ -764,12 +764,19 @@ def callbacks(dashapp):
         start_date, end_date = map(pd.to_datetime, date_range)
 
         #在loss type為pi data only下，什麼都不選會秀一張標題為process chart的空圖，而不是No loss data available on PPD for the selected period
-        if not data_melting and not data_finishing and not tags and loss_type != 'pi':
+        if (
+            (loss_type == "melting" and not data_melting)
+            or (loss_type == "finishing" and not data_finishing)
+            or (loss_type == "melting+finishing" and (not data_melting and not data_finishing))
+        ):
             fig.add_annotation(
-                text=f"No loss data available on PPD for the selected period\n({start_date} to {end_date})",
+                text=(
+                    f"No {loss_type} data available on PPD for the selected period<br>"
+                    f"({start_date.strftime('%Y/%m/%d')} ~ {end_date.strftime('%Y/%m/%d')})"
+                ),
                 xref="paper", yref="paper",
                 x=0.5, y=0.5, showarrow=False,
-                font=dict(size=15)
+                font=dict(size=20),
             )
             return fig
 
@@ -992,7 +999,7 @@ def callbacks(dashapp):
         ):
             fig.add_annotation(
                 text=(
-                    f"No data available for the selected period<br>"
+                    f"No {loss_type} data available on PPD for the selected period<br>"
                     f"({start_date.strftime('%Y/%m/%d')} ~ {end_date.strftime('%Y/%m/%d')})"
                 ),
                 xref="paper", yref="paper",
