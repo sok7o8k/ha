@@ -11,7 +11,9 @@ import plotly.express as px
 from plotly.subplots import make_subplots
 import clr
 PI.PIConfig.DEFAULT_TIMEZONE = "Asia/Taipei"
-# 15 16 417 418
+
+# 15~16 424~415 1156~1158
+
 clr.AddReference(os.path.abspath('./Microsoft.AnalysisServices.AdomdClient.dll'))
 #clr.AddReference(os.path.abspath('./app/dashapps/tw/melting/campaign_ref/Microsoft.AnalysisServices.AdomdClient.dll'))
 clr.AddReference("System.Data")
@@ -759,11 +761,10 @@ def callbacks(dashapp):
 
         if not date_range or len(date_range) != 2 or not tank:
             raise PreventUpdate  # 如果輸入條件不足，則不更新圖表
-            # 檢查資料是否存在
 
         start_date, end_date = map(pd.to_datetime, date_range)
 
-        #在loss type為pi data only下，什麼都不選會秀一張標題為process chart的空圖，而不是No loss data available on PPD for the selected period
+        #若無對應loss資料則顯示在圖表上
         if (
             (loss_type == "melting" and not data_melting)
             or (loss_type == "finishing" and not data_finishing)
@@ -1054,6 +1055,7 @@ def callbacks(dashapp):
             fig.update_layout(barmode='stack')
             fig.update_yaxes(
                 title_text="Loss%", 
+                tickformat='.1%',
                 row=yaxis_cnts, col=1,
                 secondary_y=False,
             )
