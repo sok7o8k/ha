@@ -115,6 +115,10 @@ def get_PPD(query):
     return df
 
 def filter_df(df, start_date, end_date, tank):
+    required_cols = ['CR_Date', 'Source Tank ID']
+    # 若缺少任一欄位則直接返回空 DataFrame
+    if df.empty or any(col not in df.columns for col in required_cols):
+        return pd.DataFrame()
     return df[
         (df["CR_Date"] >= start_date) &
         (df["CR_Date"] <= end_date) &
@@ -355,38 +359,6 @@ def layout(dashapp):
         ], class_name="dashboard p-3"),
         dbc.Label("Multiple Y Chart"),
         dbc.Card([
-            dbc.Row([ ## Primary Y-axis Tags
-                dbc.Col(
-                    dbc.Label("Primary Y-axis Tags"),
-                    width=12, lg=3,
-                    class_name="d-flex align-items-center",
-                ),
-                dbc.Col(
-                    dcc.Dropdown(
-                        id="priYtags_dropdown",
-                        multi=True,  # 支持多選
-                        options=[],  # 初始為空，通過 callback 動態更新
-                        value=[]     # 初始值為空，通過 callback 動態更新
-                    ),
-                    width=12, lg=9
-                ),
-            ], class_name='mb-3'),
-            dbc.Row([ ## Secondary Y-axis Tags
-                dbc.Col(
-                    dbc.Label("Secondary Y-axis Tags"),
-                    width=12, lg=3,
-                    class_name="d-flex align-items-center",
-                ),
-                dbc.Col(
-                    dcc.Dropdown(
-                        id="secYtags_dropdown",
-                        multi=True,  # 支持多選
-                        options=[],  # 初始為空，通過 callback 動態更新
-                        value=[]     # 初始值為空，通過 callback 動態更新
-                    ),
-                    width=12, lg=9
-                ),
-            ], class_name='mb-3'),
             dbc.Row([ ## Chart size
                 dbc.Col(
                     dbc.Label("Chart Width"),
@@ -394,7 +366,7 @@ def layout(dashapp):
                     class_name="d-flex align-items-center",
                 ),
                 dbc.Col(
-                    dbc.Input(id='chart_width', type="number", value=1100, min=10),
+                    dbc.Input(id='chart_width', type="number", value=1000, min=10),
                     width=12, lg=3
                 ),
                 dbc.Col(
@@ -671,48 +643,50 @@ def callbacks(dashapp):
         Input("filtered-data-finishing", "data")  # 輸入 finishing 數據
     )
     def update_defect_picker(loss_type, tank, date_range, data_melting, data_finishing):
+        import pandas as pd
+        
+        # 檢查基本輸入
         if not date_range or len(date_range) != 2 or not tank:
-            return [], []  # 如果輸入不完整，返回空選項和清空選擇
-
+            return [], []
         start_date, end_date = map(pd.to_datetime, date_range)
 
-        # 將輸入的字典格式數據轉換為 DataFrame
-        if data_melting:
-            df_cleaned_M = pd.DataFrame(data_melting)
+        # DataFrame 轉換
+        df_cleaned_M = pd.DataFrame(data_melting) if data_melting else pd.DataFrame()
+        if not df_cleaned_M.empty and "CR_Date" in df_cleaned_M:
             df_cleaned_M["CR_Date"] = pd.to_datetime(df_cleaned_M["CR_Date"], errors="coerce")
-        else:
-            df_cleaned_M = pd.DataFrame()
-
-        if data_finishing:
-            df_cleaned_F = pd.DataFrame(data_finishing)
+        df_cleaned_F = pd.DataFrame(data_finishing) if data_finishing else pd.DataFrame()
+        if not df_cleaned_F.empty and "CR_Date" in df_cleaned_F:
             df_cleaned_F["CR_Date"] = pd.to_datetime(df_cleaned_F["CR_Date"], errors="coerce")
-        else:
-            df_cleaned_F = pd.DataFrame()
 
-        # 檢查資料是否存在
-        if df_cleaned_M.empty and df_cleaned_F.empty:
-            return [], []  # 如果沒有資料，返回空選項和清空選擇
-
-        # 根據 loss_type 合併數據
+        # 根據 loss_type 條件過濾
         if loss_type == 'melting+finishing':
+            # 若 melting & finishing都沒資料則空
+            if df_cleaned_M.empty and df_cleaned_F.empty:
+                return [], []
             filtered_df_melting = df_cleaned_M[
                 (df_cleaned_M["Source Tank ID"] == tank) &
                 (df_cleaned_M["CR_Date"] >= start_date) &
                 (df_cleaned_M["CR_Date"] <= end_date)
-            ]
+            ] if not df_cleaned_M.empty else pd.DataFrame()
             filtered_df_finishing = df_cleaned_F[
                 (df_cleaned_F["Source Tank ID"] == tank) &
                 (df_cleaned_F["CR_Date"] >= start_date) &
                 (df_cleaned_F["CR_Date"] <= end_date)
-            ]
+            ] if not df_cleaned_F.empty else pd.DataFrame()
             filtered_df = pd.concat([filtered_df_melting, filtered_df_finishing])
         elif loss_type == 'melting':
+            # 若 melting 資料空，直接返回空選項
+            if df_cleaned_M.empty:
+                return [], []
             filtered_df = df_cleaned_M[
                 (df_cleaned_M["Source Tank ID"] == tank) &
                 (df_cleaned_M["CR_Date"] >= start_date) &
                 (df_cleaned_M["CR_Date"] <= end_date)
             ]
         elif loss_type == 'finishing':
+            # finishing 資料空時空
+            if df_cleaned_F.empty:
+                return [], []
             filtered_df = df_cleaned_F[
                 (df_cleaned_F["Source Tank ID"] == tank) &
                 (df_cleaned_F["CR_Date"] >= start_date) &
@@ -721,12 +695,13 @@ def callbacks(dashapp):
         else:
             return [], []
 
-        # 獲取唯一的 Defect ID 選項
+        # 若篩選結果也沒資料，空
+        if filtered_df.empty or "Defect ID" not in filtered_df:
+            return [], []
+        # Defect option
         all_defects = filtered_df["Defect ID"].dropna().unique()
         defect_options = [{"label": defect, "value": defect} for defect in all_defects]
-        # 默認選中所有 Defect
         default_values = list(all_defects)
-
         return defect_options, default_values
 
     @dashapp.callback(
@@ -921,66 +896,27 @@ def callbacks(dashapp):
 
         return fig  # 回傳更新後的圖表
 
-    # Multiple Y Chart
-    @dashapp.callback(
-        Output("priYtags_dropdown", "options", allow_duplicate=True),
-        Output("priYtags_dropdown", "value", allow_duplicate=True),
-        Output("secYtags_dropdown", "options", allow_duplicate=True),
-        Output("secYtags_dropdown", "value", allow_duplicate=True),
-        Input("tags", "value"),
-        Input("priYtags_dropdown", "value"),
-        Input("secYtags_dropdown", "value"),
-        prevent_initial_call=True
-    )
-    def update_priYsecY_circular_callback(tags, priYtags, secYtags):
-        if not isinstance(tags, list):
-            if tags is not None:
-                tags = [tags]
-            else:
-                tags = []
-        if not isinstance(priYtags, list):
-            if priYtags is not None:
-                priYtags = [priYtags]
-            else:
-                priYtags = []
-        if not isinstance(secYtags, list):
-            if secYtags is not None:
-                secYtags = [secYtags]
-            else:
-                secYtags = []
-
-        trigger_id = ctx.triggered[0]["prop_id"].split(".")[0]
-        if trigger_id == 'tags':
-            priYtags = tags
-            secYtags = []
-        elif trigger_id == 'priYtags_dropdown':    
-            secYtags = [i for i in tags if i not in priYtags]
-        elif trigger_id == 'secYtags_dropdown':
-            priYtags = [i for i in tags if i not in secYtags]
-        
-        return priYtags, priYtags, secYtags, secYtags
-
     @dashapp.callback(
         Output("combined_mulY_graph", "figure"),
-        Input("priYtags_dropdown", "value"),
-        Input("secYtags_dropdown", "value"),
+        Input("tags", "value"),
         Input("date-picker", "value"),
         Input("interval", "value"),
         Input("tank-picker", "value"),
         Input("loss-type", "value"),
         Input("defect-picker", "value"),
-        Input("pi-y-axis-setting", "value"),  # 新增 Y 軸模式輸入
-        Input("filtered-data-melting", "data"),  # 輸入 Melting 數據
-        Input("filtered-data-finishing", "data"),  # 輸入 Finishing 數據
+        Input("pi-y-axis-setting", "value"),  # 可保留，或視情況移除
+        Input("filtered-data-melting", "data"),
+        Input("filtered-data-finishing", "data"),
         Input("chart_width", "value"),
         Input("chart_height", "value")
     )
-    def update_mulY_chart(priYtags, secYtags, date_range, interval, tank, loss_type, defect, pi_y_axis_mode, data_melting, data_finishing, chart_width, chart_height):
+    def update_mulY_chart(tags, date_range, interval, tank, loss_type, defect, pi_y_axis_mode, data_melting, data_finishing, chart_width, chart_height):
+        tags = tags or []
+        defect = defect or []
         if not date_range or len(date_range) != 2 or not tank:
-            raise PreventUpdate  # 如果輸入條件不足，則不更新圖表
-            # 檢查資料是否存在
-        
-        yaxis_cnts = max(len(priYtags), len(secYtags)) + (1 if defect else 0)
+            raise PreventUpdate
+
+        yaxis_cnts = len(tags) + (1 if defect else 0)
         if not yaxis_cnts:
             raise PreventUpdate
 
@@ -988,11 +924,12 @@ def callbacks(dashapp):
             rows=yaxis_cnts, cols=1,
             shared_xaxes=True,
             vertical_spacing=0.02,
-            specs=[[{"secondary_y": True}] for _ in range(yaxis_cnts)]
+            specs=[[{"secondary_y": False}] for _ in range(yaxis_cnts)]
         )
 
         start_date, end_date = map(pd.to_datetime, date_range)
 
+        # 顯示空數據時註解
         if (
             (loss_type == "melting" and not data_melting)
             or (loss_type == "finishing" and not data_finishing)
@@ -1009,9 +946,7 @@ def callbacks(dashapp):
             )
             return fig
 
-        
-
-        # 將輸入的字典格式數據轉換為 DataFrame
+        # Defect 堆疊 bar
         df_cleaned_M, df_cleaned_F = pd.DataFrame(), pd.DataFrame()
         if data_melting:
             df_cleaned_M = pd.DataFrame(data_melting)
@@ -1020,7 +955,6 @@ def callbacks(dashapp):
             df_cleaned_F = pd.DataFrame(data_finishing)
             df_cleaned_F["CR_Date"] = pd.to_datetime(df_cleaned_F["CR_Date"], errors="coerce")
 
-        # 根據 loss_type 合併數據
         if loss_type == 'melting':
             filtered_df = filter_df(df_cleaned_M, start_date, end_date, tank)
         elif loss_type == 'finishing':
@@ -1057,47 +991,37 @@ def callbacks(dashapp):
                 title_text="Loss%", 
                 tickformat='.1%',
                 row=yaxis_cnts, col=1,
-                secondary_y=False,
             )
 
-        # 如果有選擇 PI tags 且有日期範圍，則提取並繪製 PI 數據
-        if (priYtags or secYtags) and start_date and end_date:
+        # PI 多 Y 筆 trace
+        if tags and start_date and end_date:
             if tank.startswith('TC'):
                 servername = 'grape'
             else:
-                servername = 'plum'  # TN PI server name
+                servername = 'plum'
             with PI.PIServer(server=servername) as server:
-                points = server.search(priYtags + secYtags)  # 搜尋所選的 PI tags
+                points = server.search(tags)
                 if len(points) > 0:
                     series = []
                     for p in points:
-                        # 使用選擇的頻率取樣數據
                         sample_interval_dic = {'d': '30m', 'h': '30m', '5m': '5m', '1m': '1m'}
                         data = p.interpolated_values(
                             start_time=start_date,
                             end_time=end_date,
                             interval=sample_interval_dic[interval]
                         )
-
-                        # 將數據轉換為 DataFrame 並重新設置索引
                         interpolated_data = pd.DataFrame(data).reset_index()
                         interpolated_data.columns = ['Timestamp', p.name]
                         interpolated_data = interpolated_data[pd.to_numeric(interpolated_data[p.name], errors='coerce').notnull()]
                         interpolated_data['Timestamp'] = pd.to_datetime(interpolated_data['Timestamp'])
                         interpolated_data.set_index('Timestamp', inplace=True)
-
-                        # 根據使用者選擇的 interval 將數據重新取樣
                         resample_interval_dic = {'d': '1D', 'h': '1h', '5m': '5min', '1m': '1min'}
                         resampled_data = interpolated_data.resample(resample_interval_dic[interval]).mean()
-
-                        series.append(resampled_data)  # 將每個 Tag 的數據加入 series 清單
-
-                    # 合併所有 PI tags 數據
+                        series.append(resampled_data)
                     df = pd.concat(series, axis=1)
                     df.reset_index(inplace=True)
 
-                    # 設定顏色循環，避免顏色數量限制
-                    for i, tag in enumerate(priYtags):
+                    for i, tag in enumerate(tags):
                         if tag not in df.columns:
                             continue
                         color = color_palette[i % len(color_palette)]
@@ -1109,33 +1033,11 @@ def callbacks(dashapp):
                                 name=tag.replace(f'T{tank}_', '').replace(f'T{tank}', ''),
                                 line=dict(color=color),
                             ),
-                            row=i+1, col=1, secondary_y=False
+                            row=i+1, col=1
                         )
                         fig.update_yaxes(
-                            title_text=tag.replace(f'T{tank}_', '').replace(f'T{tank}', ''), 
-                            row=i+1, col=1, 
-                            secondary_y=False,
-                            titlefont=dict(color=color),
-                            tickfont=dict(color=color),
-                        )
-                    for j, tag in enumerate(secYtags):
-                        if tag not in df.columns:
-                            continue
-                        color = color_palette[len(priYtags) + j % len(color_palette)]
-                        fig.add_trace(
-                            go.Scatter(
-                                x=df['Timestamp'],
-                                y=df[tag],
-                                mode='lines',
-                                name=tag.replace(f'T{tank}_', '').replace(f'T{tank}', ''),
-                                line=dict(color=color),
-                            ),
-                            row=j+1, col=1, secondary_y=True
-                        )
-                        fig.update_yaxes(
-                            title_text=tag.replace(f'T{tank}_', '').replace(f'T{tank}', ''), 
-                            row=j+1, col=1, 
-                            secondary_y=True,
+                            title_text=None, 
+                            row=i+1, col=1,
                             titlefont=dict(color=color),
                             tickfont=dict(color=color),
                         )
