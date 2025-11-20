@@ -12,7 +12,7 @@ from plotly.subplots import make_subplots
 import clr
 PI.PIConfig.DEFAULT_TIMEZONE = "Asia/Taipei"
 
-# 15~16 424~415 1156~1158
+# 17 18對調 398~399刪掉 1060~1062刪掉
 
 clr.AddReference(os.path.abspath('./Microsoft.AnalysisServices.AdomdClient.dll'))
 #clr.AddReference(os.path.abspath('./app/dashapps/tw/melting/campaign_ref/Microsoft.AnalysisServices.AdomdClient.dll'))
@@ -540,10 +540,11 @@ def callbacks(dashapp):
         """
         gen_condition = ", ".join([f"[FG Product].[FG_Gen].&[{float(gen):.1f}E2]" for gen in gen]) if gen else ""
         gen_condition = gen_condition.strip("'")
-        thickness_condition = ", ".join([f"[FG Product].[FG_Thickness].&[{float(thickness):.1E}]" for thickness in thickness]) if thickness else ""
+        thickness_condition = ", ".join([f"[FG Product].[FG_Thickness].&[{float(thickness):.2E}]" for thickness in thickness]) if thickness else ""
         thickness_condition = thickness_condition.strip("'")
         line_condition = ", ".join([format_line_id(line) for line in line]) if line else ""
         line_condition = line_condition.strip("'")
+
 
         # 查詢 Finishing Loss
         query_f = f"""
@@ -1004,7 +1005,7 @@ def callbacks(dashapp):
                 if len(points) > 0:
                     series = []
                     for p in points:
-                        sample_interval_dic = {'d': '30m', 'h': '30m', '5m': '5m', '1m': '1m'}
+                        sample_interval_dic = {'d': '30m', 'h': '30m', '5m': '5m', '1m': '1m', '5s': '5s'}
                         data = p.interpolated_values(
                             start_time=start_date,
                             end_time=end_date,
@@ -1015,7 +1016,7 @@ def callbacks(dashapp):
                         interpolated_data = interpolated_data[pd.to_numeric(interpolated_data[p.name], errors='coerce').notnull()]
                         interpolated_data['Timestamp'] = pd.to_datetime(interpolated_data['Timestamp'])
                         interpolated_data.set_index('Timestamp', inplace=True)
-                        resample_interval_dic = {'d': '1D', 'h': '1h', '5m': '5min', '1m': '1min'}
+                        resample_interval_dic = {'d': '1D', 'h': '1h', '5m': '5min', '1m': '1min', '5s': '5s'}
                         resampled_data = interpolated_data.resample(resample_interval_dic[interval]).mean()
                         series.append(resampled_data)
                     df = pd.concat(series, axis=1)
@@ -1059,4 +1060,4 @@ def callbacks(dashapp):
 
 if __name__ == '__main__':
     callbacks(dashapp)
-    dashapp.run_server(debug=True, port='8888')
+    dashapp.run(debug=True, port='8888')
