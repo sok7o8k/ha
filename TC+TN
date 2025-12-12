@@ -707,6 +707,7 @@ def callbacks(dashapp):
 
     @dashapp.callback(
         Output("tags", "options"), 
+        Output("tags", "value"),
         Input("tank-picker", "value")
     )
     def update_tags_options(Tank_ID):
@@ -717,8 +718,9 @@ def callbacks(dashapp):
         with PI.PIServer(server=servername) as server:
             points = server.search(f'*T{Tank_ID}*')
             pi_tags = [p.name for p in points]
-
-        return pi_tags
+        #Tank 切換時預設 tags value 清空
+        default_tags_value = []
+        return pi_tags, default_tags_value
 
     @dashapp.callback(
         Output("combined-graph", "figure"),
