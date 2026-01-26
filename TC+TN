@@ -12,7 +12,7 @@ from plotly.subplots import make_subplots
 import clr
 PI.PIConfig.DEFAULT_TIMEZONE = "Asia/Taipei"
 
-# 17 18對調 398~399刪掉 1060~1062刪掉
+# 17 18對調 398~399刪掉 1060~1062刪掉.
 
 clr.AddReference(os.path.abspath('./Microsoft.AnalysisServices.AdomdClient.dll'))
 #clr.AddReference(os.path.abspath('./app/dashapps/tw/melting/campaign_ref/Microsoft.AnalysisServices.AdomdClient.dll'))
