@@ -15,3 +15,5 @@ except Exception as e:
     print(f"Finishing Loss query failed: {e}")
 
 return melting_data, finishing_data
+
+https://corningjobs.corning.com/job/Taichung-Sr_-Specialist%2C-Production-Planning-Operations-407/1378138000/
